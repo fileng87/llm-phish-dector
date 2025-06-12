@@ -1,0 +1,4 @@
+# pnpm-workspace.yaml
+publicHoistPattern:
+  - "@next/eslint-plugin-next"
+  - "eslint-plugin-react-hooks"

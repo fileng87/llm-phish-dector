@@ -1,0 +1,144 @@
+---
+description: 
+globs: 
+alwaysApply: true
+---
+# LLM 釣魚郵件偵測器專案開發規則
+
+## 專案概述
+這是一個使用語言模型偵測釣魚郵件/文件的前端專案。使用者可以在介面上設定模型參數，貼上可疑郵件內容，系統會透過 LangChain 和 LangGraph 工作流來分析內容，並回傳結構化的偵測結果包含信心分數、可疑點和詳細解釋。
+
+## 技術架構規範
+
+### 前端技術棧
+- **包管理器**: 使用 `pnpm` 作為包管理工具
+- **框架**: Next.js 15+ (App Router)
+- **樣式**: Tailwind CSS 4+ 
+- **UI 元件**: shadcn/ui 元件庫
+- **動畫**: Framer Motion
+- **語言**: TypeScript
+
+### 語言模型整合
+- **工作流**: LangChain + LangGraph 用於建構偵測工作流
+- **執行環境**: 純前端執行，避免後端依賴
+- **輸出格式**: 使用結構化輸出 (JSON Schema) 確保回應一致性
+
+## 檔案結構指南
+
+### 主要檔案位置
+- 主頁面: [src/app/page.tsx](mdc:src/app/page.tsx)
+- 全域樣式: [src/app/globals.css](mdc:src/app/globals.css)
+- 專案設定: [package.json](mdc:package.json)
+- TypeScript 設定: [tsconfig.json](mdc:tsconfig.json)
+
+### 建議的目錄結構
+```
+src/
+├── app/                    # Next.js App Router 頁面
+├── components/             # 可重用的 React 元件
+│   ├── ui/                # shadcn/ui 元件
+│   ├── forms/             # 表單相關元件
+│   └── analysis/          # 分析結果顯示元件
+├── lib/                   # 核心功能和工具
+│   ├── langchain/         # LangChain 設定和工作流
+│   ├── schemas/           # TypeScript 類型定義和 JSON Schema
+│   └── utils/             # 工具函數
+├── hooks/                 # 自定義 React Hooks
+└── types/                 # TypeScript 類型定義
+```
+
+## 開發準則
+
+### 前端開發
+1. **元件設計**: 使用 shadcn/ui 元件作為基礎，保持一致的設計語言
+2. **狀態管理**: 優先使用 React 內建的 useState 和 useReducer，避免額外的狀態管理庫
+3. **動畫效果**: 使用 Framer Motion 提供流暢的使用者體驗
+4. **響應式設計**: 確保在不同螢幕尺寸下都有良好的使用體驗
+
+### 語言模型整合
+1. **工作流設計**: 使用 LangGraph 建構清晰的分析流程
+2. **提示詞管理**: 將系統提示詞模組化，便於維護和調整
+3. **錯誤處理**: 妥善處理模型 API 錯誤和網路問題
+4. **結構化輸出**: 定義清晰的 JSON Schema 確保回應格式一致
+
+### 資料結構規範
+
+#### 偵測結果格式
+```typescript
+interface PhishingDetectionResult {
+  isPhishing: boolean;          // 是否為釣魚郵件
+  confidenceScore: number;      // 信心分數 (0-100)
+  suspiciousPoints: string[];   // 可疑點列表
+  explanation: string;          // 詳細解釋
+  riskLevel: 'low' | 'medium' | 'high'; // 風險等級
+  timestamp: string;            // 分析時間戳
+}
+```
+
+#### 使用者輸入格式
+```typescript
+interface AnalysisRequest {
+  emailContent: string;         // 郵件內容
+  modelSettings: {
+    provider: string;           // 模型提供商
+    model: string;              // 模型名稱
+    temperature: number;        // 溫度參數
+    apiKey?: string;           // API 金鑰 (僅前端儲存)
+  };
+}
+```
+
+## 效能和安全性考量
+
+### 前端效能
+1. **代碼分割**: 使用 Next.js 的動態導入分割大型依賴
+2. **快取策略**: 適當快取模型回應以減少重複請求
+3. **載入狀態**: 提供清晰的載入指示器和進度回饋
+
+### 資料安全
+1. **API 金鑰管理**: 僅在前端本地儲存，不傳輸至任何後端
+2. **內容隱私**: 郵件內容不會儲存或傳輸至除了選定的 LLM 提供商以外的任何地方
+3. **輸入驗證**: 對使用者輸入進行適當的驗證和清理
+
+## 程式碼風格和品質
+
+### 格式化和 Linting
+- 使用 Prettier 進行代碼格式化 (設定檔: [prettier.config.mjs](mdc:prettier.config.mjs))
+- 使用 ESLint 進行代碼品質檢查 (設定檔: [eslint.config.mjs](mdc:eslint.config.mjs))
+- 使用 Husky 和 lint-staged 進行提交前檢查
+
+### TypeScript 規範
+1. **嚴格模式**: 啟用嚴格的 TypeScript 檢查
+2. **類型定義**: 為所有公共 API 和重要函數提供明確的類型定義
+3. **接口設計**: 使用 interface 定義資料結構，使用 type 定義聯合類型
+
+### 命名規範
+- **檔案**: kebab-case (例: `phishing-detector.tsx`)
+- **元件**: PascalCase (例: `PhishingDetector`)
+- **函數和變數**: camelCase (例: `analyzePhishingContent`)
+- **常數**: UPPER_SNAKE_CASE (例: `DEFAULT_CONFIDENCE_THRESHOLD`)
+
+## 測試和部署
+
+### 開發工作流
+1. **開發伺服器**: `pnpm dev` (使用 Turbopack 加速)
+2. **建構**: `pnpm build`
+3. **格式化**: `pnpm lint`
+
+### 部署考量
+- 適合部署到 Vercel、Netlify 等靜態網站託管平台
+- 確保所有 LLM API 呼叫都在客戶端執行
+- 配置適當的環境變數管理 (如果需要預設 API 金鑰)
+
+## 未來擴展考慮
+
+### 功能增強
+1. **批次分析**: 支援同時分析多封郵件
+2. **歷史記錄**: 在本地儲存分析歷史
+3. **匯出功能**: 支援分析結果的匯出
+4. **多語言支援**: 支援不同語言的釣魚郵件偵測
+
+### 模型支援
+1. **多模型比較**: 同時使用多個模型進行分析比較
+2. **自定義提示詞**: 允許使用者自定義分析提示詞
+3. **微調支援**: 為特定使用場景微調偵測邏輯
