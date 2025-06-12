@@ -207,15 +207,17 @@ export function EmailAnalyzer({ modelConfig }: EmailAnalyzerProps) {
 
           {/* 錯誤提示 */}
           {!modelConfig && (
-            <div className="glass-minimal spacing-responsive-sm rounded-lg glow-warning">
-              <p className="text-sm text-warning">⚠️ 請先選擇模型配置</p>
+            <div className="glass-minimal spacing-responsive-sm rounded-lg glow-warning flex items-center gap-2">
+              <AlertTriangle className="h-4 w-4 text-warning flex-shrink-0" />
+              <p className="text-sm text-warning">請先選擇模型配置</p>
             </div>
           )}
 
           {!apiKey && modelConfig && (
-            <div className="glass-minimal spacing-responsive-sm rounded-lg glow-warning">
+            <div className="glass-minimal spacing-responsive-sm rounded-lg glow-warning flex items-center gap-2">
+              <AlertTriangle className="h-4 w-4 text-warning flex-shrink-0" />
               <p className="text-sm text-warning">
-                ⚠️ 請先在設定中配置 {modelConfig.provider} 的 API 金鑰
+                請先在設定中配置 {modelConfig.provider} 的 API 金鑰
               </p>
             </div>
           )}
