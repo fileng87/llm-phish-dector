@@ -92,21 +92,6 @@ export function usePhishingAnalysis() {
           result: response.data,
           progress: 100,
         });
-
-        const result = response.data;
-        if (result.isPhishing) {
-          const riskText =
-            result.riskLevel === 'high'
-              ? '高'
-              : result.riskLevel === 'medium'
-                ? '中'
-                : '低';
-          toast.error(`檢測到釣魚郵件！風險等級：${riskText}`, {
-            id: 'analysis',
-            duration: 6000,
-            description: `信心分數：${result.confidenceScore}%`,
-          });
-        }
       } else {
         throw new Error(response.error || '分析失敗，但未回傳具體錯誤');
       }
