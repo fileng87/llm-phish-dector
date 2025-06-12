@@ -21,12 +21,12 @@ export function Header({
   onProviderConfigsChange,
 }: HeaderProps) {
   return (
-    <header className="sticky top-0 z-50 w-full border-b glass-card backdrop-blur-sm">
+    <header className="sticky top-0 z-50 w-full border-b glass backdrop-blur-sm">
       <div className="container mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex h-16 items-center justify-between">
           <div className="flex items-center space-x-4">
             <div className="flex items-center space-x-2">
-              <div className="h-8 w-8 bg-gradient-to-br from-blue-600 to-purple-600 rounded-lg flex items-center justify-center glow">
+              <div className="h-8 w-8 gradient-brand rounded-lg flex items-center justify-center glow">
                 <svg
                   className="h-5 w-5 text-white"
                   fill="none"
@@ -41,7 +41,7 @@ export function Header({
                   />
                 </svg>
               </div>
-              <h1 className="text-xl font-bold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">
+              <h1 className="text-xl font-bold gradient-brand bg-clip-text text-transparent">
                 釣魚郵件偵測器
               </h1>
             </div>

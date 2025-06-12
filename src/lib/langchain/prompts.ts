@@ -147,7 +147,7 @@ export const PHISHING_DETECTION_SYSTEM_PROMPT = `你是一個專業的網路安�
 - **isPhishing**: 布林值，判斷是否為釣魚郵件
 - **confidenceScore**: 數字（0-100），表示判斷的信心程度
 - **suspiciousPoints**: 字串陣列，列出發現的具體可疑點（請具體說明位置和原因）
-- **explanation**: 字串，提供詳細的分析解釋（包含分析過程和判斷依據）
+- **explanation**: 字串，提供詳細的分析解釋（包含分析過程和判斷依據，可以使用markdown格式）
 - **riskLevel**: 字串（"low"/"medium"/"high"），評估風險等級
 
 ## 判斷標準

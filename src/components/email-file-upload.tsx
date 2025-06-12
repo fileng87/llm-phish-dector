@@ -133,9 +133,9 @@ export function EmailFileUpload({
     <div className="space-y-4">
       <Card
         className={`
-          glass-card transition-all duration-200 cursor-pointer
-          ${isDragOver ? 'border-blue-500 bg-blue-50/50 dark:bg-blue-900/20' : ''}
-          ${disabled || isUploading ? 'opacity-50 cursor-not-allowed' : 'hover:border-blue-400'}
+          glass-card transition-all duration-300 cursor-pointer
+          ${isDragOver ? 'border-blue-500/50 bg-blue-500/10' : ''}
+          ${disabled || isUploading ? 'opacity-50 cursor-not-allowed' : 'hover:bg-white/20 dark:hover:bg-white/10'}
         `}
         onDragOver={handleDragOver}
         onDragLeave={handleDragLeave}
@@ -156,11 +156,9 @@ export function EmailFileUpload({
               </>
             ) : uploadedFile ? (
               <>
-                <CheckCircle2 className="h-12 w-12 text-green-500" />
+                <CheckCircle2 className="h-12 w-12 text-success" />
                 <div>
-                  <p className="font-medium text-green-600 dark:text-green-400">
-                    文件上傳成功
-                  </p>
+                  <p className="font-medium text-success">文件上傳成功</p>
                   <p className="text-sm text-muted-foreground">
                     {uploadedFile.name}
                   </p>
@@ -200,9 +198,9 @@ export function EmailFileUpload({
 
       {/* 加密警告 */}
       {encryptionWarning && (
-        <Alert className="border-yellow-200 bg-yellow-50 dark:bg-yellow-900/20">
-          <AlertCircle className="h-4 w-4 text-yellow-600" />
-          <AlertDescription className="text-yellow-800 dark:text-yellow-200">
+        <Alert className="bg-warning-light border-warning">
+          <AlertCircle className="h-4 w-4 text-warning" />
+          <AlertDescription className="text-warning">
             {encryptionWarning}
           </AlertDescription>
         </Alert>

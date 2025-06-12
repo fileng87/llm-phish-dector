@@ -1,19 +1,19 @@
 'use client';
 
 import * as React from 'react';
+import ReactMarkdown from 'react-markdown';
 
 import { EmailFileUpload } from '@/components/email-file-upload';
-import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import {
   Card,
   CardContent,
   CardDescription,
+  CardFooter,
   CardHeader,
   CardTitle,
 } from '@/components/ui/card';
 import { Label } from '@/components/ui/label';
-import { Progress } from '@/components/ui/progress';
 import { Textarea } from '@/components/ui/textarea';
 import { usePhishingAnalysis } from '@/hooks/use-phishing-analysis';
 import { ParsedEmailContent } from '@/lib/email-parser';
@@ -21,10 +21,15 @@ import { apiKeyStorage } from '@/lib/storage';
 import {
   AlertTriangle,
   CheckCircle,
+  Info,
   Loader2,
   RefreshCw,
   Send,
+  Shield,
+  ShieldAlert,
+  ShieldCheck,
 } from 'lucide-react';
+import remarkGfm from 'remark-gfm';
 import { toast } from 'sonner';
 
 interface ModelSelectionConfig {
@@ -50,7 +55,6 @@ export function EmailAnalyzer({ modelConfig }: EmailAnalyzerProps) {
     hasError,
     result,
     error,
-    progress,
   } = usePhishingAnalysis();
 
   // 需要從主頁面獲取 API 金鑰
@@ -86,17 +90,11 @@ export function EmailAnalyzer({ modelConfig }: EmailAnalyzerProps) {
     });
   };
 
-  const getRiskBadgeVariant = (riskLevel: string) => {
-    switch (riskLevel) {
-      case 'low':
-        return 'default';
-      case 'medium':
-        return 'secondary';
-      case 'high':
-        return 'destructive';
-      default:
-        return 'outline';
-    }
+  const getConfidenceColor = (score: number) => {
+    if (score >= 80) return 'text-danger';
+    if (score >= 60) return 'text-warning';
+    if (score >= 40) return 'text-brand';
+    return 'text-success';
   };
 
   // 處理郵件文件上傳
@@ -121,7 +119,7 @@ export function EmailAnalyzer({ modelConfig }: EmailAnalyzerProps) {
   return (
     <div className="grid gap-6 lg:grid-cols-2">
       {/* 輸入區域 */}
-      <Card className="glass-card glow">
+      <Card className="glass-card glow-hover">
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <Send className="h-5 w-5" />
@@ -147,9 +145,7 @@ export function EmailAnalyzer({ modelConfig }: EmailAnalyzerProps) {
               <span className="w-full border-t" />
             </div>
             <div className="relative flex justify-center text-xs uppercase">
-              <span className="bg-background px-2 text-muted-foreground">
-                或手動輸入
-              </span>
+              <span className="px-2 text-muted-foreground">或手動輸入</span>
             </div>
           </div>
 
@@ -157,32 +153,21 @@ export function EmailAnalyzer({ modelConfig }: EmailAnalyzerProps) {
             <Label htmlFor="email-content">郵件內容</Label>
             <Textarea
               id="email-content"
-              placeholder="貼上完整的郵件內容（包含標題、發送者、內容）..."
+              placeholder="請貼上可疑的郵件內容，或使用上方的檔案上傳功能..."
               value={emailContent}
               onChange={(e) => setEmailContent(e.target.value)}
-              className="min-h-[300px] max-h-[500px] glass resize-none overflow-y-auto"
+              className="min-h-[200px] max-h-[500px] glass glass-hover glass-focus resize-none overflow-y-auto"
               disabled={isAnalyzing}
             />
           </div>
 
           {/* 顯示解析後的郵件資訊 */}
           {parsedEmailData && (
-            <div className="text-xs text-muted-foreground bg-muted/50 p-3 rounded-lg space-y-1">
+            <div className="glass-minimal spacing-responsive-sm rounded-lg space-y-1">
               <p className="font-medium">已解析的郵件資訊：</p>
               <p>主題: {parsedEmailData.subject}</p>
               <p>發件人: {parsedEmailData.from}</p>
               <p>日期: {parsedEmailData.date}</p>
-            </div>
-          )}
-
-          {/* 進度條 */}
-          {isAnalyzing && (
-            <div className="space-y-2">
-              <div className="flex justify-between text-sm">
-                <span>分析進度</span>
-                <span>{progress}%</span>
-              </div>
-              <Progress value={progress} className="w-full" />
             </div>
           )}
 
@@ -192,7 +177,7 @@ export function EmailAnalyzer({ modelConfig }: EmailAnalyzerProps) {
               disabled={
                 !emailContent.trim() || !modelConfig || !apiKey || isAnalyzing
               }
-              className="flex-1 glow-hover"
+              className="flex-1"
               size="lg"
             >
               {isAnalyzing ? (
@@ -213,7 +198,7 @@ export function EmailAnalyzer({ modelConfig }: EmailAnalyzerProps) {
                 onClick={resetAnalysis}
                 variant="outline"
                 size="lg"
-                className="glass"
+                className="glass glass-hover"
               >
                 <RefreshCw className="h-4 w-4" />
               </Button>
@@ -222,27 +207,29 @@ export function EmailAnalyzer({ modelConfig }: EmailAnalyzerProps) {
 
           {/* 錯誤提示 */}
           {!modelConfig && (
-            <div className="text-sm text-yellow-600 dark:text-yellow-400 bg-yellow-50 dark:bg-yellow-900/20 p-3 rounded-lg">
-              ⚠️ 請先選擇模型配置
+            <div className="glass-minimal spacing-responsive-sm rounded-lg glow-warning">
+              <p className="text-sm text-warning">⚠️ 請先選擇模型配置</p>
             </div>
           )}
 
           {!apiKey && modelConfig && (
-            <div className="text-sm text-yellow-600 dark:text-yellow-400 bg-yellow-50 dark:bg-yellow-900/20 p-3 rounded-lg">
-              ⚠️ 請先在設定中配置 {modelConfig.provider} 的 API 金鑰
+            <div className="glass-minimal spacing-responsive-sm rounded-lg glow-warning">
+              <p className="text-sm text-warning">
+                ⚠️ 請先在設定中配置 {modelConfig.provider} 的 API 金鑰
+              </p>
             </div>
           )}
         </CardContent>
       </Card>
 
       {/* 結果區域 */}
-      <Card className="glass-card">
+      <Card className="glass-card glow-hover">
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             {result?.isPhishing ? (
-              <AlertTriangle className="h-5 w-5 text-red-500" />
+              <AlertTriangle className="h-5 w-5 text-danger" />
             ) : result && !result.isPhishing ? (
-              <CheckCircle className="h-5 w-5 text-green-500" />
+              <CheckCircle className="h-5 w-5 text-success" />
             ) : (
               <CheckCircle className="h-5 w-5 text-gray-400" />
             )}
@@ -258,25 +245,23 @@ export function EmailAnalyzer({ modelConfig }: EmailAnalyzerProps) {
           )}
 
           {isAnalyzing && (
-            <div className="flex items-center justify-center h-64">
-              <div className="text-center space-y-4">
-                <Loader2 className="h-8 w-8 animate-spin mx-auto" />
-                <p className="text-muted-foreground">AI 正在分析郵件內容...</p>
-                <p className="text-sm text-muted-foreground">
-                  進度: {progress}%
-                </p>
-              </div>
+            <div className="text-center space-y-2">
+              <Loader2 className="h-8 w-8 text-brand animate-spin mx-auto" />
+              <p className="text-sm text-muted-foreground">
+                正在分析郵件內容...
+              </p>
+              <p className="text-sm text-warning">
+                請稍候，這可能需要幾秒鐘時間
+              </p>
             </div>
           )}
 
           {hasError && (
             <div className="flex items-center justify-center h-64">
               <div className="text-center space-y-4">
-                <AlertTriangle className="h-8 w-8 text-red-500 mx-auto" />
+                <AlertTriangle className="h-8 w-8 text-danger mx-auto" />
                 <div>
-                  <p className="text-red-600 dark:text-red-400 font-medium">
-                    分析失敗
-                  </p>
+                  <p className="text-danger font-medium">分析失敗</p>
                   <p className="text-sm text-muted-foreground mt-1">{error}</p>
                 </div>
                 <Button onClick={handleRetry} variant="outline" size="sm">
@@ -290,71 +275,174 @@ export function EmailAnalyzer({ modelConfig }: EmailAnalyzerProps) {
           {result && (
             <div className="space-y-6">
               {/* 總體評估 */}
-              <div className="space-y-3">
+              <div className="space-y-4">
                 <div className="flex items-center justify-between">
-                  <span className="font-semibold">釣魚郵件判定</span>
-                  <Badge
-                    variant={result.isPhishing ? 'destructive' : 'default'}
+                  <span className="font-semibold text-lg">釣魚郵件判定</span>
+                  <div
+                    className={`px-3 py-1.5 rounded-lg flex items-center gap-1.5 font-medium text-xs ${
+                      result.isPhishing
+                        ? 'bg-red-500/10 text-red-600 dark:text-red-400 border border-red-500/20'
+                        : 'bg-green-500/10 text-green-600 dark:text-green-400 border border-green-500/20'
+                    }`}
                   >
-                    {result.isPhishing ? '是釣魚郵件' : '非釣魚郵件'}
-                  </Badge>
+                    {result.isPhishing ? (
+                      <>
+                        <ShieldAlert className="h-4 w-4" />
+                        是釣魚郵件
+                      </>
+                    ) : (
+                      <>
+                        <ShieldCheck className="h-4 w-4" />
+                        非釣魚郵件
+                      </>
+                    )}
+                  </div>
                 </div>
 
                 <div className="flex items-center justify-between">
                   <span className="font-semibold">信心分數</span>
-                  <span className="text-2xl font-bold">
+                  <span
+                    className={`text-3xl font-bold ${getConfidenceColor(result.confidenceScore)}`}
+                  >
                     {result.confidenceScore}%
                   </span>
                 </div>
 
                 <div className="flex items-center justify-between">
                   <span className="font-semibold">風險等級</span>
-                  <Badge variant={getRiskBadgeVariant(result.riskLevel)}>
-                    {result.riskLevel === 'low' && '低風險'}
-                    {result.riskLevel === 'medium' && '中等風險'}
-                    {result.riskLevel === 'high' && '高風險'}
-                  </Badge>
+                  <div
+                    className={`px-3 py-1.5 rounded-lg flex items-center gap-1.5 font-medium text-xs ${
+                      result.riskLevel === 'high'
+                        ? 'bg-red-500/10 text-red-600 dark:text-red-400 border border-red-500/20'
+                        : result.riskLevel === 'medium'
+                          ? 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20'
+                          : 'bg-green-500/10 text-green-600 dark:text-green-400 border border-green-500/20'
+                    }`}
+                  >
+                    {result.riskLevel === 'low' && (
+                      <>
+                        <Shield className="h-4 w-4" />
+                        低風險
+                      </>
+                    )}
+                    {result.riskLevel === 'medium' && (
+                      <>
+                        <AlertTriangle className="h-4 w-4" />
+                        中等風險
+                      </>
+                    )}
+                    {result.riskLevel === 'high' && (
+                      <>
+                        <ShieldAlert className="h-4 w-4" />
+                        高風險
+                      </>
+                    )}
+                  </div>
                 </div>
               </div>
+
+              {/* 分隔線 */}
+              <div className="border-t border-black/8 dark:border-white/10"></div>
 
               {/* 可疑點 */}
               {result.suspiciousPoints.length > 0 && (
-                <div className="space-y-3">
-                  <h4 className="font-semibold">可疑點分析</h4>
-                  <ul className="space-y-2">
-                    {result.suspiciousPoints.map((point, index) => (
-                      <li key={index} className="flex items-start gap-2">
-                        <AlertTriangle className="h-4 w-4 mt-0.5 text-yellow-500 flex-shrink-0" />
-                        <span className="text-sm">{point}</span>
-                      </li>
-                    ))}
-                  </ul>
-                </div>
+                <>
+                  <div className="space-y-3">
+                    <h4 className="font-semibold text-lg flex items-center gap-2">
+                      <AlertTriangle className="h-5 w-5 text-warning" />
+                      可疑點分析
+                    </h4>
+                    <ul className="space-y-3">
+                      {result.suspiciousPoints.map((point, index) => (
+                        <li key={index} className="flex items-start gap-3">
+                          <span className="flex-shrink-0 w-6 h-6 bg-warning/20 text-warning rounded-full flex items-center justify-center text-xs font-bold">
+                            {index + 1}
+                          </span>
+                          <div className="flex-1 prose prose-sm max-w-none dark:prose-invert">
+                            <div className="text-sm leading-relaxed">
+                              <ReactMarkdown
+                                remarkPlugins={[remarkGfm]}
+                                components={{
+                                  a: ({ children }) => (
+                                    <span className="text-blue-600 dark:text-blue-400 underline">
+                                      {children}
+                                    </span>
+                                  ),
+                                }}
+                              >
+                                {point}
+                              </ReactMarkdown>
+                            </div>
+                          </div>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+
+                  {/* 分隔線 */}
+                  <div className="border-t border-black/8 dark:border-white/10"></div>
+                </>
               )}
 
-              {/* 詳細說明 */}
+              {/* 詳細說明 - Markdown 渲染 */}
               <div className="space-y-3">
-                <h4 className="font-semibold">詳細說明</h4>
-                <p className="text-sm text-muted-foreground leading-relaxed">
-                  {result.explanation}
-                </p>
-              </div>
-
-              {/* 分析資訊 */}
-              <div className="text-xs text-muted-foreground border-t pt-3 space-y-1">
-                <div>
-                  分析時間: {new Date(result.timestamp).toLocaleString('zh-TW')}
-                </div>
-                {modelConfig && (
-                  <div>
-                    使用模型: {modelConfig.provider} - {modelConfig.model}{' '}
-                    (溫度: {modelConfig.temperature})
+                <h4 className="font-semibold text-lg flex items-center gap-2">
+                  <Info className="h-5 w-5 text-brand" />
+                  詳細說明
+                </h4>
+                <div className="glass-minimal rounded-lg p-4 border border-black/8 dark:border-white/10">
+                  <div className="prose prose-sm max-w-none dark:prose-invert">
+                    <div className="text-sm leading-relaxed">
+                      <ReactMarkdown
+                        remarkPlugins={[remarkGfm]}
+                        components={{
+                          a: ({ children }) => (
+                            <span className="text-blue-600 dark:text-blue-400 underline">
+                              {children}
+                            </span>
+                          ),
+                        }}
+                      >
+                        {result.explanation}
+                      </ReactMarkdown>
+                    </div>
                   </div>
-                )}
+                </div>
               </div>
             </div>
           )}
         </CardContent>
+
+        {result && (
+          <CardFooter className="flex-col space-y-4 text-xs text-muted-foreground">
+            {/* 分析資訊 */}
+            <div className="w-full space-y-1">
+              <div>
+                分析時間: {new Date(result.timestamp).toLocaleString('zh-TW')}
+              </div>
+              {modelConfig && (
+                <div>
+                  使用模型: {modelConfig.provider} - {modelConfig.model} (溫度:{' '}
+                  {modelConfig.temperature})
+                </div>
+              )}
+            </div>
+
+            {/* 分隔線 */}
+            <div className="w-full border-t border-black/8 dark:border-white/10"></div>
+
+            {/* 重要提醒 */}
+            <div className="w-full flex items-start space-x-3">
+              <AlertTriangle className="h-4 w-4 mt-0.5 text-warning flex-shrink-0" />
+              <div className="flex-1">
+                <p className="text-sm font-medium">重要提醒</p>
+                <p className="text-xs text-muted-foreground mt-1">
+                  此工具僅供參考，最終判斷請結合您的專業知識和直覺。對於重要郵件，建議透過多種管道驗證其真實性。
+                </p>
+              </div>
+            </div>
+          </CardFooter>
+        )}
       </Card>
     </div>
   );

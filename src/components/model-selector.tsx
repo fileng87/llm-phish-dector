@@ -272,16 +272,21 @@ export function ModelSelector({
     : currentModelOption?.name;
 
   return (
-    <Card className="glass-card mb-6">
-      <CardContent className="px-6">
+    <Card className="glass-card glow-hover mb-6">
+      <CardContent className="spacing-responsive !py-2">
         <div className="flex items-center justify-between mb-4">
           <div className="flex items-center space-x-2">
-            <Bot className="h-5 w-5 text-blue-600" />
-            <h3 className="font-semibold">模型設定</h3>
+            <Bot className="h-5 w-5 text-brand animate-pulse-soft" />
+            <h3 className="font-semibold text-responsive-subheading">
+              模型設定
+            </h3>
           </div>
           {finalModelName && (
             <div className="flex items-center space-x-2">
-              <Badge variant="outline" className="flex items-center space-x-1">
+              <Badge
+                variant="outline"
+                className="glass flex items-center space-x-1 glow-accent"
+              >
                 <Zap className="h-3 w-3" />
                 <span>{finalModelName}</span>
               </Badge>
@@ -289,7 +294,7 @@ export function ModelSelector({
           )}
         </div>
 
-        <div className="grid md:grid-cols-3 gap-4">
+        <div className="grid-responsive gap-4">
           {/* 供應商選擇 */}
           <div className="space-y-2">
             <Label>模型供應商</Label>
@@ -298,10 +303,10 @@ export function ModelSelector({
               onValueChange={setSelectedProvider}
               disabled={availableProviders.length === 0}
             >
-              <SelectTrigger className="glass">
+              <SelectTrigger className="glass glass-hover glass-focus">
                 <SelectValue placeholder="選擇供應商" />
               </SelectTrigger>
-              <SelectContent>
+              <SelectContent className="bg-popover border border-border shadow-lg">
                 {availableProviders.map((providerId) => (
                   <SelectItem key={providerId} value={providerId}>
                     {providerNames[providerId] || providerId}
@@ -319,10 +324,10 @@ export function ModelSelector({
               onValueChange={handleModelChange}
               disabled={!selectedProvider || loading}
             >
-              <SelectTrigger className="glass">
+              <SelectTrigger className="glass glass-hover glass-focus">
                 <SelectValue placeholder={loading ? '載入中...' : '選擇模型'} />
               </SelectTrigger>
-              <SelectContent>
+              <SelectContent className="bg-popover border border-border shadow-lg">
                 {modelOptions.map((option) => (
                   <SelectItem key={option.id} value={option.id}>
                     <div className="flex items-center space-x-2">
@@ -345,7 +350,7 @@ export function ModelSelector({
                 step="0.1"
                 value={temperature}
                 onChange={(e) => setTemperature(parseFloat(e.target.value))}
-                className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer dark:bg-gray-700 slider"
+                className="w-full h-2 gradient-brand-light rounded-lg appearance-none cursor-pointer slider"
                 disabled={!selectedProvider}
               />
               <div className="flex justify-between text-xs text-muted-foreground mt-1">
@@ -359,13 +364,14 @@ export function ModelSelector({
         {/* 自訂模型輸入 */}
         {isCustomSelected && (
           <div className="mt-4 space-y-2">
+            <div className="linear-separator my-4"></div>
             <Label htmlFor="custom-model">自訂模型名稱</Label>
             <Input
               id="custom-model"
               placeholder="輸入自訂模型名稱（例如：gpt-4-1106-preview）"
               value={customModel}
               onChange={(e) => handleCustomModelChange(e.target.value)}
-              className="glass"
+              className="glass glass-hover glass-focus"
             />
             <p className="text-xs text-muted-foreground">
               請輸入完整的模型名稱。支援字母、數字、連字號、底線和點號。
@@ -375,7 +381,7 @@ export function ModelSelector({
 
         {/* 模型描述 */}
         {currentModelOption?.description && !isCustomSelected && (
-          <div className="mt-4 p-3 bg-muted/50 rounded-lg">
+          <div className="mt-4 glass-minimal spacing-responsive-sm rounded-lg">
             <p className="text-sm text-muted-foreground">
               {currentModelOption.description}
             </p>
