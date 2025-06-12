@@ -56,7 +56,7 @@ export class PhishingDetector {
 
       // 如果支援工具調用，創建工作流
       if (this.supportsToolCalling) {
-        this.workflow = new PhishingAnalysisWorkflow(this.model, true);
+        this.workflow = new PhishingAnalysisWorkflow(this.model);
       }
     } catch (error) {
       if (error instanceof PhishingAnalysisError) {
@@ -88,7 +88,7 @@ export class PhishingDetector {
 
       // 如果支援工具調用且要求使用工具，使用工作流
       if (this.supportsToolCalling && useTools && this.workflow) {
-        return await this.workflow.analyze(emailContent, true);
+        return await this.workflow.analyze(emailContent);
       }
 
       // 否則使用傳統方式

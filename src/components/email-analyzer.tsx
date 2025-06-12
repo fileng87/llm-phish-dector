@@ -70,11 +70,8 @@ export function EmailAnalyzer({ modelConfig }: EmailAnalyzerProps) {
     await analyzeEmail({
       emailContent,
       modelSettings: {
-        provider: modelConfig.provider,
-        model: modelConfig.model,
-        temperature: modelConfig.temperature,
-        apiKey: apiKey,
-        useTools: modelConfig.useTools,
+        ...modelConfig,
+        apiKey,
       },
     });
   };
@@ -85,11 +82,8 @@ export function EmailAnalyzer({ modelConfig }: EmailAnalyzerProps) {
     retryAnalysis({
       emailContent,
       modelSettings: {
-        provider: modelConfig.provider,
-        model: modelConfig.model,
-        temperature: modelConfig.temperature,
-        apiKey: apiKey,
-        useTools: modelConfig.useTools,
+        ...modelConfig,
+        apiKey,
       },
     });
   };
