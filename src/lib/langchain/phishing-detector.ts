@@ -74,12 +74,7 @@ export class PhishingDetector {
         throw new PhishingAnalysisError('郵件內容不能為空', 'EMPTY_CONTENT');
       }
 
-      if (emailContent.trim().length > 50000) {
-        throw new PhishingAnalysisError(
-          '郵件內容過長，請限制在 50,000 字符以內',
-          'CONTENT_TOO_LONG'
-        );
-      }
+      // 移除字數限制，允許任意長度的郵件內容
 
       // 準備訊息
       const messages = [

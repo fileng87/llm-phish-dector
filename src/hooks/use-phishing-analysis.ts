@@ -107,16 +107,7 @@ export function usePhishingAnalysis() {
       return;
     }
 
-    // 檢查郵件內容長度
-    if (request.emailContent.trim().length > 50000) {
-      const errorMessage = '郵件內容過長，請限制在 50,000 字符以內';
-      setAnalysisState({
-        status: 'error',
-        error: errorMessage,
-      });
-      toast.error(errorMessage);
-      return;
-    }
+    // 移除字數限制，允許任意長度的郵件內容
 
     let progressInterval: NodeJS.Timeout | null = null;
 
@@ -127,8 +118,7 @@ export function usePhishingAnalysis() {
         progress: 0,
       });
 
-      // 顯示開始分析的通知
-      toast.loading('開始分析郵件...', { id: 'analysis' });
+      // 移除開始分析的通知，避免干擾使用者
 
       // 模擬進度更新
       progressInterval = setInterval(() => {

@@ -16,7 +16,7 @@ import {
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { usePhishingAnalysis } from '@/hooks/use-phishing-analysis';
-import { ParsedEmailContent } from '@/lib/email-parser';
+import { ParsedEmailContent, parseEmailFromText } from '@/lib/email-parser';
 import { apiKeyStorage } from '@/lib/storage';
 import {
   AlertTriangle,
@@ -30,7 +30,6 @@ import {
   ShieldCheck,
 } from 'lucide-react';
 import remarkGfm from 'remark-gfm';
-import { toast } from 'sonner';
 
 interface ModelSelectionConfig {
   provider: string;
@@ -62,8 +61,6 @@ export function EmailAnalyzer({ modelConfig }: EmailAnalyzerProps) {
 
   const handleAnalyze = async () => {
     if (!emailContent.trim() || !modelConfig || !apiKey) return;
-
-    toast.loading('開始分析郵件內容...', { id: 'analysis' });
 
     await analyzeEmail({
       emailContent,
@@ -105,6 +102,26 @@ export function EmailAnalyzer({ modelConfig }: EmailAnalyzerProps) {
     },
     []
   );
+
+  // 處理文字區域內容變更
+  const handleEmailContentChange = React.useCallback(async (value: string) => {
+    setEmailContent(value);
+
+    // 嘗試解析貼上的內容（使用 postal-mime 套件）
+    try {
+      const parsed = await parseEmailFromText(value);
+      if (parsed) {
+        // 解析成功後，用格式化的完整內容覆蓋原本的文字
+        setEmailContent(parsed.fullContent);
+        setParsedEmailData(parsed);
+      } else {
+        setParsedEmailData(null);
+      }
+    } catch (error) {
+      console.log('解析貼上內容失敗:', error);
+      setParsedEmailData(null);
+    }
+  }, []);
 
   // 暫時從 localStorage 獲取 API 金鑰（實際應該從父組件傳入）
   React.useEffect(() => {
@@ -155,7 +172,10 @@ export function EmailAnalyzer({ modelConfig }: EmailAnalyzerProps) {
               id="email-content"
               placeholder="請貼上可疑的郵件內容，或使用上方的檔案上傳功能..."
               value={emailContent}
-              onChange={(e) => setEmailContent(e.target.value)}
+              onChange={(e) => {
+                // 異步處理郵件內容變更
+                handleEmailContentChange(e.target.value);
+              }}
               className="min-h-[200px] max-h-[500px] glass glass-hover glass-focus resize-none overflow-y-auto"
               disabled={isAnalyzing}
             />

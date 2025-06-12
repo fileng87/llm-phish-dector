@@ -288,3 +288,90 @@ export function detectEncryptedContent(content: string): {
     warning: null,
   };
 }
+
+/**
+ * 解析貼上的郵件文字內容
+ */
+export async function parseEmailFromText(
+  content: string
+): Promise<ParsedEmailContent | null> {
+  try {
+    // 首先嘗試使用 postal-mime 解析
+    try {
+      const parsedEmail = await PostalMime.parse(content);
+      return formatParsedEmail(parsedEmail);
+    } catch (postalError) {
+      console.log('postal-mime 解析失敗，嘗試簡單解析:', postalError);
+
+      // 如果 postal-mime 解析失敗，回退到簡單的文字解析
+      return parseEmailFromTextSimple(content);
+    }
+  } catch (error) {
+    console.error('郵件文字解析失敗:', error);
+    return null;
+  }
+}
+
+/**
+ * 簡單的文字解析（回退方案）
+ */
+function parseEmailFromTextSimple(content: string): ParsedEmailContent | null {
+  try {
+    // 嘗試解析郵件標頭
+    const lines = content.split('\n');
+    let subject = '';
+    let from = '';
+    let to = '';
+    let date = '';
+    let bodyStartIndex = 0;
+
+    // 查找郵件標頭
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i].trim();
+
+      if (line.toLowerCase().startsWith('subject:')) {
+        subject = line.substring(8).trim();
+      } else if (line.toLowerCase().startsWith('from:')) {
+        from = line.substring(5).trim();
+      } else if (line.toLowerCase().startsWith('to:')) {
+        to = line.substring(3).trim();
+      } else if (line.toLowerCase().startsWith('date:')) {
+        date = line.substring(5).trim();
+      } else if (line === '' && i > 0) {
+        // 空行通常表示標頭結束，郵件正文開始
+        bodyStartIndex = i + 1;
+        break;
+      }
+    }
+
+    // 如果找到了至少一個標頭，則認為是郵件格式
+    if (subject || from || to || date) {
+      const textContent = lines.slice(bodyStartIndex).join('\n').trim();
+
+      // 使用與上傳檔案相同的格式化邏輯
+      const fullContent = generateFullContent({
+        subject: subject || '無主題',
+        from: from || '未知發件人',
+        to: to || '未知收件人',
+        date: date || '未知日期',
+        textContent,
+        htmlContent: '',
+        attachments: [],
+      });
+
+      return {
+        subject: subject || '無主題',
+        from: from || '未知發件人',
+        to: to || '未知收件人',
+        date: date || '未知日期',
+        textContent,
+        htmlContent: '',
+        fullContent,
+      };
+    }
+  } catch (error) {
+    console.log('簡單解析失敗:', error);
+  }
+
+  return null;
+}
