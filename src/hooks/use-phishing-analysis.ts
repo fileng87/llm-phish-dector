@@ -106,12 +106,6 @@ export function usePhishingAnalysis() {
             duration: 6000,
             description: `信心分數：${result.confidenceScore}%`,
           });
-        } else {
-          toast.success('郵件安全，未檢測到釣魚風險', {
-            id: 'analysis',
-            duration: 4000,
-            description: `信心分數：${result.confidenceScore}%`,
-          });
         }
       } else {
         throw new Error(response.error || '分析失敗，但未回傳具體錯誤');
