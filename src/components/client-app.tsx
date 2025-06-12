@@ -5,6 +5,7 @@ import * as React from 'react';
 import { CollapsibleSettings } from '@/components/collapsible-settings';
 import { EmailAnalyzer } from '@/components/email-analyzer';
 import { HeroSection } from '@/components/hero-section';
+import { ModelConfigLoader } from '@/lib/model-config-loader';
 import {
   type ModelSelectionConfig,
   type ToolConfig,
@@ -42,6 +43,9 @@ export function ClientApp() {
   // 初始化狀態
   const [isInitialized, setIsInitialized] = React.useState(false);
 
+  // 所有支援的供應商
+  const [allProviders, setAllProviders] = React.useState<string[]>([]);
+
   // 初始化供應商配置、工具配置和模型設定
   React.useEffect(() => {
     const initializeConfigs = () => {
@@ -75,17 +79,15 @@ export function ClientApp() {
       setIsInitialized(true);
     };
 
+    // 載入所有支援的供應商
+    ModelConfigLoader.getProviderNames().then((names) => {
+      setAllProviders(Object.keys(names));
+    });
+
     initializeConfigs();
   }, []);
 
-  // 獲取可用的供應商列表（有 API 金鑰的）
-  const availableProviders = React.useMemo(() => {
-    return Object.entries(providerConfigs)
-      .filter(([, config]) => config.apiKey)
-      .map(([providerId]) => providerId);
-  }, [providerConfigs]);
-
-  // 獲取已啟用的工具列表
+  // 取得已啟用的工具列表
   const enabledTools = React.useMemo(() => {
     return Object.entries(toolConfigs)
       .filter(([, config]) => config.isEnabled && config.apiKey)
@@ -142,7 +144,7 @@ export function ClientApp() {
             <CollapsibleSettings
               modelConfig={modelConfig}
               onModelConfigChange={handleModelConfigChange}
-              availableProviders={availableProviders}
+              availableProviders={allProviders}
               providerConfigs={providerConfigs}
               onProviderConfigsChange={handleProviderConfigsChange}
               toolConfigs={toolConfigs}
