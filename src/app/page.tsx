@@ -1,6 +1,7 @@
 import { ClientApp } from '@/components/client-app';
 import { FeaturesSection } from '@/components/features-section';
 import { Footer } from '@/components/footer';
+import { Header } from '@/components/header';
 
 /**
  * 主頁面 - 使用 SSR + 客戶端混合模式
@@ -9,6 +10,8 @@ import { Footer } from '@/components/footer';
 export default function Home() {
   return (
     <div className="min-h-screen">
+      <Header />
+
       {/* 客戶端應用容器 - 包含 Header、介紹區域和主要功能 */}
       <ClientApp />
 

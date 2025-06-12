@@ -8,7 +8,6 @@ import {
   parseEmailFile,
 } from '@/app/actions';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { AlertCircle, CheckCircle2, FileText, Upload } from 'lucide-react';
 import { toast } from 'sonner';
@@ -127,19 +126,11 @@ export function EmailFileUpload({
     }
   };
 
-  const handleClearFile = () => {
-    setUploadedFile(null);
-    setEncryptionWarning(null);
-    if (fileInputRef.current) {
-      fileInputRef.current.value = '';
-    }
-  };
-
   return (
     <div className="space-y-4">
       <Card
         className={`
-          glass-card transition-all duration-300 cursor-pointer
+          glass transition-all duration-300 cursor-pointer
           ${isDragOver ? 'border-blue-500/50 bg-blue-500/10' : ''}
           ${disabled || isUploading ? 'opacity-50 cursor-not-allowed' : 'hover:bg-white/20 dark:hover:bg-white/10'}
         `}
@@ -172,17 +163,6 @@ export function EmailFileUpload({
                     {(uploadedFile.size / 1024).toFixed(1)} KB
                   </p>
                 </div>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    handleClearFile();
-                  }}
-                  className="mt-2"
-                >
-                  重新上傳
-                </Button>
               </>
             ) : (
               <>

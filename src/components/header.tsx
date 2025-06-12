@@ -1,32 +1,8 @@
-'use client';
-
 import * as React from 'react';
 
-import { ToolConfig } from '@/lib/storage';
-
-import { SettingsDialog } from './settings-dialog';
 import { ThemeToggle } from './theme-toggle';
-import { ToolsConfigDialog } from './tools-config-dialog';
 
-interface ModelConfig {
-  provider: string;
-  apiKey: string;
-  isEnabled: boolean;
-}
-
-interface HeaderProps {
-  providerConfigs: Record<string, ModelConfig>;
-  onProviderConfigsChange: (configs: Record<string, ModelConfig>) => void;
-  toolConfigs: Record<string, ToolConfig>;
-  onToolConfigsChange: (configs: Record<string, ToolConfig>) => void;
-}
-
-export function Header({
-  providerConfigs,
-  onProviderConfigsChange,
-  toolConfigs,
-  onToolConfigsChange,
-}: HeaderProps) {
+export function Header() {
   return (
     <header className="sticky top-0 z-50 w-full border-b glass backdrop-blur-sm">
       <div className="container mx-auto px-4 sm:px-6 lg:px-8">
@@ -55,14 +31,6 @@ export function Header({
           </div>
 
           <div className="flex items-center space-x-4">
-            <ToolsConfigDialog
-              toolConfigs={toolConfigs}
-              onToolConfigsChange={onToolConfigsChange}
-            />
-            <SettingsDialog
-              providerConfigs={providerConfigs}
-              onProviderConfigsChange={onProviderConfigsChange}
-            />
             <ThemeToggle />
           </div>
         </div>

@@ -231,13 +231,18 @@
     font-feature-settings:
       'rlig' 1,
       'calt' 1;
-    /* 添加漸變背景提升毛玻璃效果 */
+    /* 淺色模式點陣背景 */
     background-image: radial-gradient(
       circle at 1px 1px,
-      rgba(59, 130, 246, 0.05) 1px,
+      rgba(0, 0, 0, 0.1) 1px,
       transparent 0
     );
-    background-size: 20px 20px;
+    background-size: 32px 32px;
+  }
+
+  /* 深色模式純色背景 */
+  .dark body {
+    background-image: none;
   }
 
   /* 深色模式光源效果 */
@@ -260,7 +265,8 @@
     );
     z-index: -10;
     pointer-events: none;
-    animation: breathe 8s ease-in-out infinite;
+    will-change: opacity;
+    animation: breathe-optimized 12s ease-in-out infinite;
   }
 }
 
@@ -275,7 +281,7 @@
   }
 
   .glass-card {
-    @apply bg-background/35 dark:bg-background/25 rounded-xl border border-black/10 shadow-xl backdrop-blur-lg dark:border-white/15;
+    @apply bg-background/35 dark:bg-background/25 rounded-xl border border-black/10 backdrop-blur-lg dark:border-white/15;
   }
 
   .glass-strong {
@@ -491,6 +497,7 @@
 
     .dark::before {
       animation: none;
+      opacity: 0.6 !important;
     }
 
     .transition-all,
@@ -549,6 +556,16 @@
   50% {
     opacity: 0.6;
     transform: translateX(-50%) scale(1.1);
+  }
+}
+
+@keyframes breathe-optimized {
+  0%,
+  100% {
+    opacity: 0.8;
+  }
+  50% {
+    opacity: 0.4;
   }
 }
 

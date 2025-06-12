@@ -99,20 +99,20 @@ export class PhishingDetector {
       // 如果支援工具調用且要求使用工具，使用工作流
       if (this.supportsToolCalling && useTools && this.workflow) {
         // 檢查是否有啟用的工具和對應的 API 金鑰
-        if (!toolSettings || !toolSettings.enabledTools.length) {
-          throw new PhishingAnalysisError(
-            '使用工具需要至少啟用一個工具',
-            'NO_TOOLS_ENABLED'
-          );
+        if (
+          !toolSettings ||
+          !toolSettings.enabledTools ||
+          !toolSettings.enabledTools.length
+        ) {
+          console.log('⚠️ 沒有啟用的工具，回退到純模型分析');
+          return await this.analyzeWithoutTools(emailContent);
         }
 
         // 檢查 Tavily API 金鑰（目前主要支援的工具）
         const tavilyConfig = toolSettings.toolConfigs['tavily'];
         if (!tavilyConfig?.apiKey) {
-          throw new PhishingAnalysisError(
-            '使用搜尋工具需要提供 Tavily API 金鑰',
-            'TAVILY_API_KEY_REQUIRED'
-          );
+          console.log('⚠️ 缺少 Tavily API 金鑰，回退到純模型分析');
+          return await this.analyzeWithoutTools(emailContent);
         }
 
         return await this.workflow.analyze(emailContent, tavilyConfig.apiKey);
@@ -526,16 +526,40 @@ export async function analyzePhishingEmail(
   const detector = new PhishingDetector(modelConfig, useTools);
   console.log('模型是否支援工具調用:', detector.canUseTools);
 
-  if (useTools && !detector.canUseTools) {
-    throw new PhishingAnalysisError(
-      `模型 ${modelConfig.model} 不支援工具調用，請選擇其他模型或關閉工具使用`,
-      'TOOLS_NOT_SUPPORTED'
-    );
+  // 檢查是否要使用工具
+  let actuallyUseTools = false;
+  if (useTools && detector.canUseTools) {
+    // 檢查是否有啟用的工具和對應的配置
+    if (
+      request.toolSettings?.enabledTools &&
+      request.toolSettings.enabledTools.length > 0
+    ) {
+      // 檢查是否有有效的工具配置
+      const hasValidToolConfig = request.toolSettings.enabledTools.some(
+        (toolName) => {
+          const config = request.toolSettings?.toolConfigs[toolName];
+          return config?.apiKey && config.apiKey.trim().length > 0;
+        }
+      );
+
+      if (hasValidToolConfig) {
+        actuallyUseTools = true;
+        console.log('✅ 將使用工具進行分析');
+      } else {
+        console.log('⚠️ 工具已啟用但缺少有效配置，將使用純模型分析');
+      }
+    } else {
+      console.log('⚠️ 未啟用任何工具，將使用純模型分析');
+    }
+  } else if (useTools && !detector.canUseTools) {
+    console.log('⚠️ 模型不支援工具調用，將使用純模型分析');
+  } else {
+    console.log('ℹ️ 工具調用已關閉，將使用純模型分析');
   }
 
   return await detector.analyzeEmail(
     request.emailContent,
-    useTools,
+    actuallyUseTools,
     request.toolSettings
   );
 }

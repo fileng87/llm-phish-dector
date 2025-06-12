@@ -60,7 +60,6 @@ export function EmailAnalyzer({
     resetAnalysis,
     retryAnalysis,
     isAnalyzing,
-    isCompleted,
     hasError,
     result,
     error,
@@ -338,17 +337,16 @@ export function EmailAnalyzer({
               )}
             </Button>
 
-            {(isCompleted || hasError) && (
-              <Button
-                onClick={handleReset}
-                variant="outline"
-                size="lg"
-                className="glass glass-hover"
-              >
-                <RefreshCw className="h-4 w-4 mr-2" />
-                重置
-              </Button>
-            )}
+            <Button
+              onClick={handleReset}
+              variant="outline"
+              size="lg"
+              className="glass glass-hover"
+              disabled={!emailContent.trim() && !result && !hasError}
+            >
+              <RefreshCw className="h-4 w-4 mr-2" />
+              重置
+            </Button>
           </div>
 
           {/* 錯誤提示 */}

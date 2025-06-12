@@ -3,6 +3,7 @@
 import * as React from 'react';
 
 import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -13,29 +14,44 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { Switch } from '@/components/ui/switch';
 import { ModelConfigLoader } from '@/lib/model-config-loader';
-import { type ModelSelectionConfig, modelConfigStorage } from '@/lib/storage';
+import {
+  type ModelSelectionConfig,
+  apiKeyStorage,
+  modelConfigStorage,
+} from '@/lib/storage';
 import { ModelOption } from '@/types/model-config';
-import { Bot, Zap } from 'lucide-react';
+import { Bot, Eye, EyeOff, Key } from 'lucide-react';
 import { toast } from 'sonner';
+
+interface ModelConfig {
+  provider: string;
+  apiKey: string;
+}
 
 interface ModelSelectorProps {
   onConfigChange: (config: ModelSelectionConfig) => void;
   availableProviders: string[];
   initialConfig?: ModelSelectionConfig | null;
+  providerConfigs: Record<string, ModelConfig>;
+  onProviderConfigsChange: (configs: Record<string, ModelConfig>) => void;
+  onCustomModelChange?: (isCustom: boolean) => void;
 }
 
 export function ModelSelector({
   onConfigChange,
   availableProviders,
   initialConfig,
+  providerConfigs,
+  onProviderConfigsChange,
+  onCustomModelChange,
 }: ModelSelectorProps) {
   const [selectedProvider, setSelectedProvider] = React.useState<string>('');
   const [selectedModel, setSelectedModel] = React.useState<string>('');
   const [customModel, setCustomModel] = React.useState<string>('');
   const [temperature, setTemperature] = React.useState<number>(0.7);
   const [useTools, setUseTools] = React.useState<boolean>(false);
+  const [showApiKey, setShowApiKey] = React.useState<boolean>(false);
   const [modelOptions, setModelOptions] = React.useState<ModelOption[]>([]);
   const [providerNames, setProviderNames] = React.useState<
     Record<string, string>
@@ -73,7 +89,7 @@ export function ModelSelector({
         if (!isInitialized && options.length > 0 && !options[0].isCustom) {
           const firstModel = options[0];
           setSelectedModel(firstModel.id);
-          // 根據模型配置自動設定工具調用
+          // 預設模型根據支援情況自動設定工具調用
           setUseTools(firstModel.supportsToolCalling || false);
         }
       } catch (error) {
@@ -115,7 +131,7 @@ export function ModelSelector({
         if (modelOption) {
           setSelectedModel(config.model);
           setCustomModel('');
-          // 預設模型根據配置自動設定工具調用
+          // 預設模型根據支援情況自動設定工具調用
           setUseTools(modelOption.supportsToolCalling || false);
         } else {
           // 如果不在預設選項中，設為自訂模型
@@ -231,7 +247,9 @@ export function ModelSelector({
   // 處理模型選擇變更
   const handleModelChange = (modelId: string) => {
     setSelectedModel(modelId);
-    if (modelId === '__custom__') {
+    const isCustom = modelId === '__custom__';
+
+    if (isCustom) {
       setCustomModel('');
       // 自訂模型預設關閉工具調用，讓用戶手動選擇
       setUseTools(false);
@@ -244,6 +262,9 @@ export function ModelSelector({
         setUseTools(false);
       }
     }
+
+    // 通知父組件是否選擇了自訂模型
+    onCustomModelChange?.(isCustom);
   };
 
   // 處理自訂模型輸入
@@ -257,6 +278,42 @@ export function ModelSelector({
         // toast.error(validation.error);
       }
     }
+  };
+
+  // 處理 API 金鑰變更
+  const handleApiKeyChange = (providerId: string, apiKey: string) => {
+    const updatedConfigs = {
+      ...providerConfigs,
+      [providerId]: {
+        ...getProviderConfig(providerId),
+        apiKey,
+      },
+    };
+    onProviderConfigsChange(updatedConfigs);
+
+    // 儲存到 localStorage
+    apiKeyStorage.set(providerId, apiKey);
+  };
+
+  // 獲取供應商配置
+  const getProviderConfig = (providerId: string): ModelConfig => {
+    const config = providerConfigs[providerId];
+    if (config) {
+      return config;
+    }
+
+    // 從 localStorage 載入 API 金鑰
+    const storedApiKey = apiKeyStorage.get(providerId);
+
+    return {
+      provider: providerId,
+      apiKey: storedApiKey,
+    };
+  };
+
+  // 切換 API 金鑰顯示
+  const toggleApiKeyVisibility = () => {
+    setShowApiKey(!showApiKey);
   };
 
   // 當配置改變時通知父組件
@@ -293,7 +350,7 @@ export function ModelSelector({
     : currentModelOption?.name;
 
   return (
-    <Card className="glass-card glow-hover mb-6">
+    <Card className="glass-card h-full">
       <CardContent className="spacing-responsive !py-2">
         <div className="flex items-center justify-between mb-4">
           <div className="flex items-center space-x-2">
@@ -308,14 +365,14 @@ export function ModelSelector({
                 variant="outline"
                 className="glass flex items-center space-x-1 glow-accent"
               >
-                <Zap className="h-3 w-3" />
+                <Bot className="h-3 w-3" />
                 <span>{finalModelName}</span>
               </Badge>
             </div>
           )}
         </div>
 
-        <div className="grid-responsive gap-4">
+        <div className="space-y-4">
           {/* 供應商選擇 */}
           <div className="space-y-2">
             <Label>模型供應商</Label>
@@ -336,6 +393,43 @@ export function ModelSelector({
               </SelectContent>
             </Select>
           </div>
+
+          {/* API 金鑰設定 */}
+          {selectedProvider && (
+            <div className="space-y-2">
+              <Label className="flex items-center gap-2">
+                <Key className="h-4 w-4" />
+                API 金鑰
+              </Label>
+              <div className="relative">
+                <Input
+                  type={showApiKey ? 'text' : 'password'}
+                  placeholder={`輸入 ${providerNames[selectedProvider] || selectedProvider} API 金鑰`}
+                  value={getProviderConfig(selectedProvider).apiKey || ''}
+                  onChange={(e) =>
+                    handleApiKeyChange(selectedProvider, e.target.value)
+                  }
+                  className="glass glass-hover glass-focus pr-10"
+                />
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  className="absolute right-0 top-0 h-full w-10 rounded-l-none hover:bg-transparent"
+                  onClick={toggleApiKeyVisibility}
+                >
+                  {showApiKey ? (
+                    <EyeOff className="h-4 w-4 text-muted-foreground hover:text-foreground" />
+                  ) : (
+                    <Eye className="h-4 w-4 text-muted-foreground hover:text-foreground" />
+                  )}
+                </Button>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                API 金鑰僅在您的瀏覽器本地儲存，不會上傳至任何伺服器
+              </p>
+            </div>
+          )}
 
           {/* 模型選擇 */}
           <div className="space-y-2">
@@ -380,89 +474,6 @@ export function ModelSelector({
               </div>
             </div>
           </div>
-
-          {/* 預設模型的工具調用狀態顯示 */}
-          {!isCustomSelected && currentModelOption && (
-            <div className="space-y-2">
-              <div className="flex items-center justify-between">
-                <div className="space-y-0.5">
-                  <Label className="flex items-center gap-2">
-                    <Zap className="h-4 w-4" />
-                    工具調用功能
-                  </Label>
-                  <p className="text-xs text-muted-foreground">
-                    {currentModelOption.supportsToolCalling
-                      ? '此模型支援深度技術分析，已自動啟用'
-                      : '此模型不支援工具調用功能'}
-                  </p>
-                </div>
-                <div className="flex items-center gap-2">
-                  {currentModelOption.supportsToolCalling ? (
-                    <Badge
-                      variant="default"
-                      className="bg-green-500/20 text-green-700 dark:text-green-400 border-green-500/30 font-medium"
-                    >
-                      <Zap className="h-3 w-3 mr-1" />
-                      已啟用
-                    </Badge>
-                  ) : (
-                    <>
-                      <div className="h-2 w-2 bg-gray-400 rounded-full"></div>
-                      <Badge
-                        variant="secondary"
-                        className="bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400 border-gray-300 dark:border-gray-600"
-                      >
-                        不支援
-                      </Badge>
-                    </>
-                  )}
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* 工具調用設定 - 只在自訂模型時顯示 */}
-          {isCustomSelected && (
-            <div className="space-y-3">
-              <div className="p-4 border border-blue-200 dark:border-blue-800/30 rounded-lg bg-blue-50/50 dark:bg-blue-950/20">
-                <div className="flex items-center justify-between">
-                  <div className="space-y-1">
-                    <Label
-                      htmlFor="use-tools"
-                      className="flex items-center gap-2 text-base font-medium"
-                    >
-                      <Zap className="h-4 w-4 text-blue-600 dark:text-blue-400" />
-                      啟用工具調用功能
-                    </Label>
-                    <p className="text-xs text-blue-700 dark:text-blue-300">
-                      讓自訂模型使用深度技術分析工具進行更準確的釣魚郵件檢測
-                    </p>
-                  </div>
-                  <div className="flex items-center gap-3">
-                    <Switch
-                      id="use-tools"
-                      checked={useTools}
-                      onCheckedChange={setUseTools}
-                      disabled={!selectedProvider}
-                      className="scale-125 data-[state=checked]:bg-green-500"
-                    />
-                  </div>
-                </div>
-                {!useTools && (
-                  <div className="mt-3 p-3 bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-800/30 rounded-lg">
-                    <div className="flex items-start gap-2">
-                      <div className="h-4 w-4 border-2 border-amber-500 rounded-full flex items-center justify-center mt-0.5 flex-shrink-0">
-                        <div className="h-1.5 w-1.5 bg-amber-500 rounded-full"></div>
-                      </div>
-                      <p className="text-xs text-amber-700 dark:text-amber-300">
-                        建議啟用工具調用功能以獲得更準確的分析結果
-                      </p>
-                    </div>
-                  </div>
-                )}
-              </div>
-            </div>
-          )}
         </div>
 
         {/* 自訂模型輸入 */}
@@ -495,7 +506,7 @@ export function ModelSelector({
         {availableProviders.length === 0 && (
           <div className="text-center py-4 text-muted-foreground">
             <p className="text-sm">
-              尚未配置任何模型供應商，請先到設定中配置 API 金鑰並啟用供應商
+              尚未配置任何模型供應商，請先選擇供應商並輸入 API 金鑰
             </p>
           </div>
         )}

@@ -2,10 +2,9 @@
 
 import * as React from 'react';
 
+import { CollapsibleSettings } from '@/components/collapsible-settings';
 import { EmailAnalyzer } from '@/components/email-analyzer';
-import { Header } from '@/components/header';
 import { HeroSection } from '@/components/hero-section';
-import { ModelSelector } from '@/components/model-selector';
 import {
   type ModelSelectionConfig,
   type ToolConfig,
@@ -17,7 +16,6 @@ import {
 interface ModelConfig {
   provider: string;
   apiKey: string;
-  isEnabled: boolean;
 }
 
 /**
@@ -38,6 +36,9 @@ export function ClientApp() {
     Record<string, ToolConfig>
   >({});
 
+  // 是否為自訂模型
+  const [isCustomModel, setIsCustomModel] = React.useState(false);
+
   // 初始化狀態
   const [isInitialized, setIsInitialized] = React.useState(false);
 
@@ -53,7 +54,6 @@ export function ClientApp() {
         configs[providerId] = {
           provider: providerId,
           apiKey,
-          isEnabled: true, // 有 API 金鑰的預設為啟用
         };
       });
 
@@ -78,10 +78,10 @@ export function ClientApp() {
     initializeConfigs();
   }, []);
 
-  // 獲取已啟用的供應商列表
-  const enabledProviders = React.useMemo(() => {
+  // 獲取可用的供應商列表（有 API 金鑰的）
+  const availableProviders = React.useMemo(() => {
     return Object.entries(providerConfigs)
-      .filter(([, config]) => config.isEnabled && config.apiKey)
+      .filter(([, config]) => config.apiKey)
       .map(([providerId]) => providerId);
   }, [providerConfigs]);
 
@@ -111,11 +111,11 @@ export function ClientApp() {
     (configs: Record<string, ModelConfig>) => {
       setProviderConfigs(configs);
 
-      // 如果當前選中的供應商被停用或移除，清除模型設定
+      // 如果當前選中的供應商沒有 API 金鑰，清除模型設定
       if (
         modelConfig &&
         (!configs[modelConfig.provider] ||
-          !configs[modelConfig.provider].isEnabled)
+          !configs[modelConfig.provider].apiKey)
       ) {
         setModelConfig(null);
       }
@@ -132,24 +132,24 @@ export function ClientApp() {
 
   return (
     <>
-      <Header
-        providerConfigs={providerConfigs}
-        onProviderConfigsChange={handleProviderConfigsChange}
-        toolConfigs={toolConfigs}
-        onToolConfigsChange={handleToolConfigsChange}
-      />
-
       <main className="container mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <div className="space-y-8">
           {/* 介紹區域 - SSR */}
           <HeroSection />
 
-          {/* 模型選擇器 */}
+          {/* 可折疊設定區域 */}
           {isInitialized && (
-            <ModelSelector
-              onConfigChange={handleModelConfigChange}
-              availableProviders={enabledProviders}
-              initialConfig={modelConfig}
+            <CollapsibleSettings
+              modelConfig={modelConfig}
+              onModelConfigChange={handleModelConfigChange}
+              availableProviders={availableProviders}
+              providerConfigs={providerConfigs}
+              onProviderConfigsChange={handleProviderConfigsChange}
+              toolConfigs={toolConfigs}
+              onToolConfigsChange={handleToolConfigsChange}
+              enabledTools={enabledTools}
+              isCustomModel={isCustomModel}
+              onCustomModelChange={setIsCustomModel}
             />
           )}
 
