@@ -23,6 +23,13 @@ export function usePhishingAnalysis() {
     if (error instanceof Error) {
       return error.message;
     }
+    if (typeof error === 'object' && error !== null) {
+      try {
+        return JSON.stringify(error);
+      } catch {
+        return '未知物件錯誤';
+      }
+    }
     return '發生未知錯誤，請稍後重試';
   };
 
@@ -113,7 +120,13 @@ export function usePhishingAnalysis() {
       });
 
       console.error('郵件分析失敗:', {
-        error,
+        error:
+          error instanceof Error
+            ? { message: error.message, stack: error.stack }
+            : typeof error === 'object'
+              ? JSON.stringify(error)
+              : error,
+        parsedError: errorMessage,
         request: {
           emailContentLength: request.emailContent.length,
           provider: request.modelSettings.provider,
