@@ -7,6 +7,7 @@ import { HumanMessage, SystemMessage } from '@langchain/core/messages';
 import { JsonOutputParser } from '@langchain/core/output_parsers';
 
 import { ModelConfig, ModelConfigError, ModelFactory } from './model-factory';
+import { PhishingAnalysisWorkflow } from './phishing-workflow';
 import {
   PHISHING_DETECTION_SYSTEM_PROMPT,
   generateAnalysisPrompt,
@@ -32,8 +33,10 @@ export class PhishingAnalysisError extends Error {
 export class PhishingDetector {
   private model: BaseChatModel;
   private parser: JsonOutputParser;
+  private workflow?: PhishingAnalysisWorkflow;
+  private supportsToolCalling: boolean;
 
-  constructor(modelConfig: ModelConfig) {
+  constructor(modelConfig: ModelConfig, useTools: boolean = false) {
     try {
       // 驗證配置
       const validation = ModelFactory.validateConfig(modelConfig);
@@ -46,9 +49,15 @@ export class PhishingDetector {
 
       // 創建模型實例
       this.model = ModelFactory.createModel(modelConfig);
+      this.supportsToolCalling = useTools && !!this.model.bindTools;
 
       // 創建 JSON 輸出解析器
       this.parser = new JsonOutputParser();
+
+      // 如果支援工具調用，創建工作流
+      if (this.supportsToolCalling) {
+        this.workflow = new PhishingAnalysisWorkflow(this.model, true);
+      }
     } catch (error) {
       if (error instanceof PhishingAnalysisError) {
         throw error;
@@ -67,45 +76,23 @@ export class PhishingDetector {
   /**
    * 分析郵件內容
    */
-  async analyzeEmail(emailContent: string): Promise<PhishingDetectionResult> {
+  async analyzeEmail(
+    emailContent: string,
+    useTools: boolean = false
+  ): Promise<PhishingDetectionResult> {
     try {
       // 驗證輸入
       if (!emailContent || emailContent.trim().length === 0) {
         throw new PhishingAnalysisError('郵件內容不能為空', 'EMPTY_CONTENT');
       }
 
-      // 移除字數限制，允許任意長度的郵件內容
-
-      // 準備訊息
-      const messages = [
-        new SystemMessage(PHISHING_DETECTION_SYSTEM_PROMPT),
-        new HumanMessage(generateAnalysisPrompt(emailContent)),
-      ];
-
-      // 調用模型
-      let response;
-      try {
-        response = await this.model.invoke(messages);
-      } catch (error) {
-        throw new PhishingAnalysisError(
-          this.parseModelError(error),
-          'MODEL_INVOCATION_FAILED',
-          error instanceof Error ? error : undefined
-        );
+      // 如果支援工具調用且要求使用工具，使用工作流
+      if (this.supportsToolCalling && useTools && this.workflow) {
+        return await this.workflow.analyze(emailContent, true);
       }
 
-      // 解析 JSON 回應
-      const rawResult = await this.parseModelResponse(
-        response.content.toString()
-      );
-
-      // 驗證和格式化結果
-      const result = this.validateAndFormatResult(rawResult);
-
-      // 添加時間戳
-      result.timestamp = new Date().toISOString();
-
-      return result;
+      // 否則使用傳統方式
+      return await this.analyzeWithoutTools(emailContent);
     } catch (error) {
       if (error instanceof PhishingAnalysisError) {
         throw error;
@@ -124,6 +111,51 @@ export class PhishingDetector {
         error instanceof Error ? error : undefined
       );
     }
+  }
+
+  /**
+   * 不使用工具的傳統分析方式
+   */
+  private async analyzeWithoutTools(
+    emailContent: string
+  ): Promise<PhishingDetectionResult> {
+    // 準備訊息
+    const messages = [
+      new SystemMessage(PHISHING_DETECTION_SYSTEM_PROMPT),
+      new HumanMessage(generateAnalysisPrompt(emailContent)),
+    ];
+
+    // 調用模型
+    let response;
+    try {
+      response = await this.model.invoke(messages);
+    } catch (error) {
+      throw new PhishingAnalysisError(
+        this.parseModelError(error),
+        'MODEL_INVOCATION_FAILED',
+        error instanceof Error ? error : undefined
+      );
+    }
+
+    // 解析 JSON 回應
+    const rawResult = await this.parseModelResponse(
+      response.content.toString()
+    );
+
+    // 驗證和格式化結果
+    const result = this.validateAndFormatResult(rawResult);
+
+    // 添加時間戳
+    result.timestamp = new Date().toISOString();
+
+    return result;
+  }
+
+  /**
+   * 檢查是否支援工具調用
+   */
+  get canUseTools(): boolean {
+    return this.supportsToolCalling;
   }
 
   /**
@@ -431,23 +463,12 @@ export class PhishingDetector {
    */
   async testConnection(): Promise<boolean> {
     try {
-      const testMessage = [
-        new SystemMessage('你是一個有用的助手。'),
-        new HumanMessage("請回覆 '連接測試成功' 來確認連接正常。"),
-      ];
-
-      const response = await this.model.invoke(testMessage);
-      const content = response.content.toString().toLowerCase();
-      return (
-        content.includes('成功') ||
-        content.includes('正常') ||
-        content.includes('ok')
+      const model = ModelFactory.createModel(
+        this.model.lc_kwargs as ModelConfig
       );
-    } catch (error) {
-      console.error('連接測試失敗:', {
-        errorMessage: error instanceof Error ? error.message : String(error),
-        errorName: error instanceof Error ? error.name : 'Unknown',
-      });
+      await model.invoke('test');
+      return true;
+    } catch {
       return false;
     }
   }
@@ -455,10 +476,27 @@ export class PhishingDetector {
 
 /**
  * 便利函數：直接分析郵件
+ * 這個函數封裝了 PhishingDetector 的實例化和調用，
+ * 為 Server Action 提供一個乾淨的入口點。
  */
 export async function analyzePhishingEmail(
   request: AnalysisRequest
 ): Promise<PhishingDetectionResult> {
-  const detector = new PhishingDetector(request.modelSettings);
-  return await detector.analyzeEmail(request.emailContent);
+  const modelConfig: ModelConfig = {
+    provider: request.modelSettings.provider,
+    model: request.modelSettings.model,
+    temperature: request.modelSettings.temperature,
+    apiKey: request.modelSettings.apiKey,
+  };
+
+  const useTools = request.modelSettings.useTools ?? true;
+  console.log('=== 分析請求參數 ===');
+  console.log('useTools 設定:', useTools);
+  console.log('模型提供商:', modelConfig.provider);
+  console.log('模型名稱:', modelConfig.model);
+
+  const detector = new PhishingDetector(modelConfig, useTools);
+  console.log('模型是否支援工具調用:', detector.canUseTools);
+
+  return await detector.analyzeEmail(request.emailContent, useTools);
 }

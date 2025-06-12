@@ -1,4 +1,46 @@
+'use server';
+
+import { analyzePhishingEmail } from '@/lib/langchain/phishing-detector';
+import { AnalysisRequest } from '@/types/phishing-detection';
 import PostalMime from 'postal-mime';
+
+export async function analyzeEmailContent(request: AnalysisRequest) {
+  try {
+    const result = await analyzePhishingEmail(request);
+    return { success: true, data: result };
+  } catch (error) {
+    const errorMessage =
+      error instanceof Error ? error.message : 'An unknown error occurred';
+    console.error('Analysis failed in Server Action:', error);
+    return { success: false, error: errorMessage };
+  }
+}
+
+// 新增：支援進度回報的分析函數
+export async function analyzeEmailWithProgress(
+  request: AnalysisRequest,
+  onProgress?: (step: string, description: string) => void
+) {
+  try {
+    // 開始分析
+    onProgress?.('initializing', '正在初始化分析...');
+
+    const result = await analyzePhishingEmail(request);
+
+    // 完成分析
+    onProgress?.('completed', '分析完成');
+
+    return { success: true, data: result };
+  } catch (error) {
+    const errorMessage =
+      error instanceof Error ? error.message : 'An unknown error occurred';
+    console.error('Analysis failed in Server Action:', error);
+
+    onProgress?.('error', `分析失敗: ${errorMessage}`);
+
+    return { success: false, error: errorMessage };
+  }
+}
 
 /**
  * 郵件解析結果介面
@@ -14,37 +56,39 @@ export interface ParsedEmailContent {
 }
 
 /**
- * 郵件解析錯誤
+ * 解析郵件文件 (Server Action)
  */
-export class EmailParseError extends Error {
-  constructor(
-    message: string,
-    public code: string
-  ) {
-    super(message);
-    this.name = 'EmailParseError';
-  }
-}
+export async function parseEmailFile(formData: FormData): Promise<{
+  success: boolean;
+  data?: ParsedEmailContent;
+  error?: string;
+}> {
+  'use server';
 
-/**
- * 解析郵件文件
- */
-export async function parseEmailFile(file: File): Promise<ParsedEmailContent> {
   try {
+    const file = formData.get('file') as File;
+
+    if (!file) {
+      return {
+        success: false,
+        error: '未找到文件',
+      };
+    }
+
     // 驗證文件類型
     if (!isValidEmailFile(file)) {
-      throw new EmailParseError(
-        '不支援的文件格式。請上傳 .eml、.msg 或純文字郵件文件',
-        'INVALID_FILE_TYPE'
-      );
+      return {
+        success: false,
+        error: '不支援的文件格式。請上傳 .eml、.msg 或純文字郵件文件',
+      };
     }
 
     // 驗證文件大小 (限制 10MB)
     if (file.size > 10 * 1024 * 1024) {
-      throw new EmailParseError(
-        '文件過大，請上傳小於 10MB 的郵件文件',
-        'FILE_TOO_LARGE'
-      );
+      return {
+        success: false,
+        error: '文件過大，請上傳小於 10MB 的郵件文件',
+      };
     }
 
     // 讀取文件內容
@@ -54,25 +98,73 @@ export async function parseEmailFile(file: File): Promise<ParsedEmailContent> {
     const parsedEmail = await PostalMime.parse(fileContent);
 
     // 格式化解析結果
-    return formatParsedEmail(parsedEmail);
-  } catch (error) {
-    if (error instanceof EmailParseError) {
-      throw error;
-    }
+    const result = formatParsedEmail(parsedEmail);
 
+    return {
+      success: true,
+      data: result,
+    };
+  } catch (error) {
     console.error('郵件解析失敗:', {
       errorMessage: error instanceof Error ? error.message : String(error),
       errorName: error instanceof Error ? error.name : 'Unknown',
-      fileName: file.name,
-      fileSize: file.size,
-      fileType: file.type,
     });
 
-    throw new EmailParseError(
-      `郵件解析失敗: ${error instanceof Error ? error.message : '未知錯誤'}`,
-      'PARSE_FAILED'
-    );
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : '郵件解析失敗',
+    };
   }
+}
+
+/**
+ * 檢測加密內容 (Server Action)
+ */
+export async function detectEncryptedContent(content: string): Promise<{
+  isEncrypted: boolean;
+  encryptionType: string | null;
+  warning: string | null;
+}> {
+  'use server';
+
+  const encryptionPatterns = [
+    {
+      pattern: /-----BEGIN PGP MESSAGE-----/i,
+      type: 'PGP',
+      warning: '此郵件包含 PGP 加密內容，可能無法完整分析',
+    },
+    {
+      pattern: /-----BEGIN ENCRYPTED MESSAGE-----/i,
+      type: 'Generic',
+      warning: '此郵件包含加密內容，可能無法完整分析',
+    },
+    {
+      pattern: /Content-Type:\s*application\/pkcs7-mime/i,
+      type: 'S/MIME',
+      warning: '此郵件使用 S/MIME 加密，可能無法完整分析',
+    },
+    {
+      pattern: /Content-Transfer-Encoding:\s*base64/i,
+      type: 'Base64',
+      warning: '此郵件包含 Base64 編碼內容，已嘗試解碼分析',
+    },
+  ];
+
+  for (const { pattern, type, warning } of encryptionPatterns) {
+    if (pattern.test(content)) {
+      return {
+        isEncrypted: true,
+        encryptionType: type,
+        warning,
+      };
+    }
+  }
+
+  return {
+    isEncrypted: false,
+    encryptionType: null,
+    warning: null,
+  };
 }
 
 /**
@@ -101,28 +193,16 @@ function isValidEmailFile(file: File): boolean {
  * 讀取文件內容
  */
 async function readFileContent(file: File): Promise<string | ArrayBuffer> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
+  const arrayBuffer = await file.arrayBuffer();
 
-    reader.onload = () => {
-      if (reader.result) {
-        resolve(reader.result);
-      } else {
-        reject(new Error('無法讀取文件內容'));
-      }
-    };
-
-    reader.onerror = () => {
-      reject(new Error('文件讀取失敗'));
-    };
-
-    // 嘗試以文字格式讀取，如果失敗則以二進制格式讀取
-    try {
-      reader.readAsText(file, 'utf-8');
-    } catch {
-      reader.readAsArrayBuffer(file);
-    }
-  });
+  // 嘗試以 UTF-8 解碼
+  try {
+    const decoder = new TextDecoder('utf-8');
+    return decoder.decode(arrayBuffer);
+  } catch {
+    // 如果 UTF-8 解碼失敗，返回 ArrayBuffer
+    return arrayBuffer;
+  }
 }
 
 /**
@@ -215,13 +295,13 @@ function generateFullContent(data: {
 
   // 郵件內容
   if (data.textContent) {
-    sections.push('=== 純文字內容 ===');
+    sections.push('=== 郵件內容 (純文字) ===');
     sections.push(data.textContent);
     sections.push('');
   }
 
   if (data.htmlContent && data.htmlContent !== data.textContent) {
-    sections.push('=== HTML 內容 ===');
+    sections.push('=== 郵件內容 (HTML) ===');
     sections.push(data.htmlContent);
     sections.push('');
   }
@@ -230,10 +310,9 @@ function generateFullContent(data: {
   if (data.attachments.length > 0) {
     sections.push('=== 附件資訊 ===');
     data.attachments.forEach((attachment, index) => {
-      sections.push(`附件 ${index + 1}:`);
-      sections.push(`  檔案名稱: ${attachment.filename || '未知'}`);
-      sections.push(`  檔案類型: ${attachment.mimeType || '未知'}`);
-      sections.push(`  檔案大小: ${attachment.content?.byteLength || 0} bytes`);
+      sections.push(
+        `附件 ${index + 1}: ${attachment.filename || '未知檔名'} (${attachment.mimeType || '未知類型'}, ${attachment.content?.byteLength || 0} bytes)`
+      );
     });
     sections.push('');
   }
@@ -242,73 +321,65 @@ function generateFullContent(data: {
 }
 
 /**
- * 檢測郵件是否包含加密內容
+ * 解析貼上的郵件文字內容 (Server Action)
  */
-export function detectEncryptedContent(content: string): {
-  isEncrypted: boolean;
-  encryptionType: string | null;
-  warning: string | null;
-} {
-  const encryptionPatterns = [
-    {
-      pattern: /-----BEGIN PGP MESSAGE-----/i,
-      type: 'PGP',
-      warning: '此郵件包含 PGP 加密內容，需要先解密才能進行完整分析',
-    },
-    {
-      pattern: /-----BEGIN ENCRYPTED MESSAGE-----/i,
-      type: 'Generic',
-      warning: '此郵件包含加密內容，可能無法進行完整分析',
-    },
-    {
-      pattern: /Content-Type:.*application\/pkcs7-mime/i,
-      type: 'S/MIME',
-      warning: '此郵件使用 S/MIME 加密，需要先解密才能進行完整分析',
-    },
-    {
-      pattern: /Content-Type:.*application\/x-pkcs7-mime/i,
-      type: 'S/MIME',
-      warning: '此郵件使用 S/MIME 加密，需要先解密才能進行完整分析',
-    },
-  ];
+export async function parseEmailFromText(content: string): Promise<{
+  success: boolean;
+  data?: ParsedEmailContent;
+  error?: string;
+}> {
+  'use server';
 
-  for (const { pattern, type, warning } of encryptionPatterns) {
-    if (pattern.test(content)) {
-      return {
-        isEncrypted: true,
-        encryptionType: type,
-        warning,
-      };
-    }
+  if (!content.trim()) {
+    return {
+      success: false,
+      error: '郵件內容不能為空',
+    };
   }
 
-  return {
-    isEncrypted: false,
-    encryptionType: null,
-    warning: null,
-  };
-}
-
-/**
- * 解析貼上的郵件文字內容
- */
-export async function parseEmailFromText(
-  content: string
-): Promise<ParsedEmailContent | null> {
   try {
     // 首先嘗試使用 postal-mime 解析
     try {
       const parsedEmail = await PostalMime.parse(content);
-      return formatParsedEmail(parsedEmail);
+      const result = formatParsedEmail(parsedEmail);
+
+      return {
+        success: true,
+        data: result,
+      };
     } catch (postalError) {
       console.log('postal-mime 解析失敗，嘗試簡單解析:', postalError);
 
       // 如果 postal-mime 解析失敗，回退到簡單的文字解析
-      return parseEmailFromTextSimple(content);
+      const simpleResult = parseEmailFromTextSimple(content);
+
+      if (simpleResult) {
+        return {
+          success: true,
+          data: simpleResult,
+        };
+      } else {
+        // 如果簡單解析也失敗，返回原始內容
+        return {
+          success: true,
+          data: {
+            subject: '無主題',
+            from: '未知發件人',
+            to: '未知收件人',
+            date: '未知日期',
+            textContent: content,
+            htmlContent: '',
+            fullContent: content,
+          },
+        };
+      }
     }
   } catch (error) {
     console.error('郵件文字解析失敗:', error);
-    return null;
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : '郵件解析失敗',
+    };
   }
 }
 

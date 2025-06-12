@@ -134,6 +134,7 @@ export interface ModelSelectionConfig {
   provider: string;
   model: string;
   temperature: number;
+  useTools?: boolean; // 是否使用工具調用
 }
 
 export const modelConfigStorage = {

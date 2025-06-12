@@ -36,6 +36,7 @@ export class ModelConfigLoader {
       name: model.name,
       description: model.description,
       recommended: model.recommended,
+      supportsToolCalling: model.supportsToolCalling || false,
       isCustom: false,
     }));
 
@@ -46,6 +47,7 @@ export class ModelConfigLoader {
         name: '自訂模型',
         description: config.customModelSettings.description,
         isCustom: true,
+        supportsToolCalling: false, // 自訂模型預設不支援，需要用戶手動啟用
       });
     }
 

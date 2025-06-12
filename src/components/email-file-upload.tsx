@@ -2,15 +2,14 @@
 
 import * as React from 'react';
 
+import {
+  type ParsedEmailContent,
+  detectEncryptedContent,
+  parseEmailFile,
+} from '@/app/actions';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
-import {
-  EmailParseError,
-  ParsedEmailContent,
-  detectEncryptedContent,
-  parseEmailFile,
-} from '@/lib/email-parser';
 import { AlertCircle, CheckCircle2, FileText, Upload } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -41,11 +40,22 @@ export function EmailFileUpload({
     try {
       toast.loading(`正在解析郵件文件: ${file.name}`, { id: 'file-upload' });
 
-      // 解析郵件文件
-      const parsedEmail = await parseEmailFile(file);
+      // 創建 FormData 並發送到後端解析
+      const formData = new FormData();
+      formData.append('file', file);
+
+      const response = await parseEmailFile(formData);
+
+      if (!response.success || !response.data) {
+        throw new Error(response.error || '郵件解析失敗');
+      }
+
+      const parsedEmail = response.data;
 
       // 檢測加密內容
-      const encryptionInfo = detectEncryptedContent(parsedEmail.fullContent);
+      const encryptionInfo = await detectEncryptedContent(
+        parsedEmail.fullContent
+      );
       if (encryptionInfo.isEncrypted && encryptionInfo.warning) {
         setEncryptionWarning(encryptionInfo.warning);
       }
@@ -66,12 +76,8 @@ export function EmailFileUpload({
         fileType: file.type,
       });
 
-      let errorMessage = '郵件文件解析失敗';
-      if (error instanceof EmailParseError) {
-        errorMessage = error.message;
-      } else if (error instanceof Error) {
-        errorMessage = `解析失敗: ${error.message}`;
-      }
+      const errorMessage =
+        error instanceof Error ? error.message : '郵件文件解析失敗';
 
       toast.error(errorMessage, {
         id: 'file-upload',

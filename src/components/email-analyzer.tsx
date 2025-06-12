@@ -3,6 +3,7 @@
 import * as React from 'react';
 import ReactMarkdown from 'react-markdown';
 
+import { ParsedEmailContent, parseEmailFromText } from '@/app/actions';
 import { EmailFileUpload } from '@/components/email-file-upload';
 import { Button } from '@/components/ui/button';
 import {
@@ -16,11 +17,11 @@ import {
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { usePhishingAnalysis } from '@/hooks/use-phishing-analysis';
-import { ParsedEmailContent, parseEmailFromText } from '@/lib/email-parser';
 import { apiKeyStorage } from '@/lib/storage';
 import {
   AlertTriangle,
   CheckCircle,
+  FileText,
   Info,
   Loader2,
   RefreshCw,
@@ -30,11 +31,13 @@ import {
   ShieldCheck,
 } from 'lucide-react';
 import remarkGfm from 'remark-gfm';
+import { toast } from 'sonner';
 
 interface ModelSelectionConfig {
   provider: string;
   model: string;
   temperature: number;
+  useTools?: boolean;
 }
 
 interface EmailAnalyzerProps {
@@ -45,6 +48,7 @@ export function EmailAnalyzer({ modelConfig }: EmailAnalyzerProps) {
   const [emailContent, setEmailContent] = React.useState('');
   const [parsedEmailData, setParsedEmailData] =
     React.useState<ParsedEmailContent | null>(null);
+  const [isParsing, setIsParsing] = React.useState(false);
   const {
     analyzeEmail,
     resetAnalysis,
@@ -54,6 +58,7 @@ export function EmailAnalyzer({ modelConfig }: EmailAnalyzerProps) {
     hasError,
     result,
     error,
+    stepDescription,
   } = usePhishingAnalysis();
 
   // 需要從主頁面獲取 API 金鑰
@@ -69,6 +74,7 @@ export function EmailAnalyzer({ modelConfig }: EmailAnalyzerProps) {
         model: modelConfig.model,
         temperature: modelConfig.temperature,
         apiKey: apiKey,
+        useTools: modelConfig.useTools,
       },
     });
   };
@@ -83,6 +89,7 @@ export function EmailAnalyzer({ modelConfig }: EmailAnalyzerProps) {
         model: modelConfig.model,
         temperature: modelConfig.temperature,
         apiKey: apiKey,
+        useTools: modelConfig.useTools,
       },
     });
   };
@@ -103,25 +110,60 @@ export function EmailAnalyzer({ modelConfig }: EmailAnalyzerProps) {
     []
   );
 
-  // 處理文字區域內容變更
-  const handleEmailContentChange = React.useCallback(async (value: string) => {
-    setEmailContent(value);
-
-    // 嘗試解析貼上的內容（使用 postal-mime 套件）
-    try {
-      const parsed = await parseEmailFromText(value);
-      if (parsed) {
-        // 解析成功後，用格式化的完整內容覆蓋原本的文字
-        setEmailContent(parsed.fullContent);
-        setParsedEmailData(parsed);
-      } else {
+  // 處理文字區域內容變更（移除自動解析）
+  const handleEmailContentChange = React.useCallback(
+    (value: string) => {
+      setEmailContent(value);
+      // 如果內容改變，清除之前的解析結果
+      if (parsedEmailData) {
         setParsedEmailData(null);
       }
-    } catch (error) {
-      console.log('解析貼上內容失敗:', error);
-      setParsedEmailData(null);
+    },
+    [parsedEmailData]
+  );
+
+  // 手動解析郵件內容
+  const handleParseEmailContent = async () => {
+    if (!emailContent.trim()) {
+      toast.error('請先輸入郵件內容');
+      return;
     }
-  }, []);
+
+    setIsParsing(true);
+
+    try {
+      toast.loading('正在解析郵件內容...', { id: 'parse-email' });
+
+      const response = await parseEmailFromText(emailContent);
+
+      if (!response.success || !response.data) {
+        throw new Error(response.error || '郵件解析失敗');
+      }
+
+      const parsedEmail = response.data;
+
+      // 更新解析結果
+      setParsedEmailData(parsedEmail);
+
+      // 如果解析成功且有格式化的內容，更新文字區域
+      if (parsedEmail.fullContent !== emailContent) {
+        setEmailContent(parsedEmail.fullContent);
+      }
+
+      toast.success('郵件內容解析成功', {
+        id: 'parse-email',
+        description: `主題: ${parsedEmail.subject}`,
+      });
+    } catch (error) {
+      console.error('解析郵件內容失敗:', error);
+      toast.error('郵件內容解析失敗', {
+        id: 'parse-email',
+        description: error instanceof Error ? error.message : '未知錯誤',
+      });
+    } finally {
+      setIsParsing(false);
+    }
+  };
 
   // 暫時從 localStorage 獲取 API 金鑰（實際應該從父組件傳入）
   React.useEffect(() => {
@@ -152,7 +194,7 @@ export function EmailAnalyzer({ modelConfig }: EmailAnalyzerProps) {
             <Label>上傳郵件文件</Label>
             <EmailFileUpload
               onEmailParsed={handleEmailParsed}
-              disabled={isAnalyzing}
+              disabled={isAnalyzing || isParsing}
             />
           </div>
 
@@ -167,27 +209,71 @@ export function EmailAnalyzer({ modelConfig }: EmailAnalyzerProps) {
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="email-content">郵件內容</Label>
+            <div className="flex items-center justify-between">
+              <Label htmlFor="email-content">郵件內容</Label>
+              {emailContent.trim() && !parsedEmailData && (
+                <Button
+                  onClick={handleParseEmailContent}
+                  disabled={isParsing || isAnalyzing}
+                  variant="outline"
+                  size="sm"
+                  className="glass glass-hover"
+                >
+                  {isParsing ? (
+                    <>
+                      <Loader2 className="mr-2 h-3 w-3 animate-spin" />
+                      解析中
+                    </>
+                  ) : (
+                    <>
+                      <FileText className="mr-2 h-3 w-3" />
+                      解析郵件
+                    </>
+                  )}
+                </Button>
+              )}
+            </div>
             <Textarea
               id="email-content"
               placeholder="請貼上可疑的郵件內容，或使用上方的檔案上傳功能..."
               value={emailContent}
-              onChange={(e) => {
-                // 異步處理郵件內容變更
-                handleEmailContentChange(e.target.value);
-              }}
+              onChange={(e) => handleEmailContentChange(e.target.value)}
               className="min-h-[200px] max-h-[500px] glass glass-hover glass-focus resize-none overflow-y-auto"
-              disabled={isAnalyzing}
+              disabled={isAnalyzing || isParsing}
             />
+            {emailContent.trim() && !parsedEmailData && (
+              <div className="flex items-start gap-2 text-xs text-muted-foreground">
+                <Info className="h-3 w-3 mt-0.5 flex-shrink-0" />
+                <p>
+                  提示：點擊「解析郵件」按鈕可以自動格式化郵件內容，提高分析準確度
+                </p>
+              </div>
+            )}
           </div>
 
           {/* 顯示解析後的郵件資訊 */}
           {parsedEmailData && (
             <div className="glass-minimal spacing-responsive-sm rounded-lg space-y-1">
-              <p className="font-medium">已解析的郵件資訊：</p>
-              <p>主題: {parsedEmailData.subject}</p>
-              <p>發件人: {parsedEmailData.from}</p>
-              <p>日期: {parsedEmailData.date}</p>
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <CheckCircle className="h-4 w-4 text-success" />
+                  <p className="font-medium text-success">已解析的郵件資訊</p>
+                </div>
+                <Button
+                  onClick={() => {
+                    setParsedEmailData(null);
+                    // 可選：恢復到原始內容
+                  }}
+                  variant="ghost"
+                  size="sm"
+                  className="h-6 px-2 text-xs"
+                >
+                  清除
+                </Button>
+              </div>
+              <p className="text-sm">主題: {parsedEmailData.subject}</p>
+              <p className="text-sm">發件人: {parsedEmailData.from}</p>
+              <p className="text-sm">日期: {parsedEmailData.date}</p>
             </div>
           )}
 
@@ -195,7 +281,11 @@ export function EmailAnalyzer({ modelConfig }: EmailAnalyzerProps) {
             <Button
               onClick={handleAnalyze}
               disabled={
-                !emailContent.trim() || !modelConfig || !apiKey || isAnalyzing
+                !emailContent.trim() ||
+                !modelConfig ||
+                !apiKey ||
+                isAnalyzing ||
+                isParsing
               }
               className="flex-1"
               size="lg"
@@ -203,7 +293,7 @@ export function EmailAnalyzer({ modelConfig }: EmailAnalyzerProps) {
               {isAnalyzing ? (
                 <>
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  分析中...
+                  {stepDescription || '分析中...'}
                 </>
               ) : (
                 <>
@@ -270,7 +360,7 @@ export function EmailAnalyzer({ modelConfig }: EmailAnalyzerProps) {
             <div className="text-center space-y-2">
               <Loader2 className="h-8 w-8 text-brand animate-spin mx-auto" />
               <p className="text-sm text-muted-foreground">
-                正在分析郵件內容...
+                {stepDescription || '正在分析郵件內容...'}
               </p>
               <p className="text-sm text-warning">
                 請稍候，這可能需要幾秒鐘時間

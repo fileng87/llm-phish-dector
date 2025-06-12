@@ -16,6 +16,7 @@ export interface AnalysisRequest {
     model: string; // 模型名稱
     temperature: number; // 溫度參數
     apiKey: string; // API 金鑰
+    useTools?: boolean; // 是否使用工具調用
   };
 }
 

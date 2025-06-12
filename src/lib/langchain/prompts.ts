@@ -135,7 +135,18 @@ export const PHISHING_DETECTION_SYSTEM_PROMPT = `你是一個專業的網路安�
 - 注意過於完美或過於粗糙的內容
 - 識別不符合機構風格的表達
 
-### 3. 風險評估
+### 3. 深度技術分析
+- **強烈建議**：對於包含連結、附件或可疑域名的郵件，應進行更深入的技術分析
+- 當發現以下情況時，建議使用專業工具進行詳細檢查：
+  - 郵件中包含任何 URL 連結（無論看起來多麼正常）
+  - 提及特定網站、域名或線上服務
+  - 包含附件或要求下載檔案
+  - 發件人域名需要進一步驗證
+  - 郵件標頭資訊可能被偽造
+- 技術分析可以揭示肉眼難以察覺的安全風險
+- 即使初步看起來正常的連結，也可能隱藏重定向或其他風險
+
+### 4. 風險評估
 - 評估潛在損失程度
 - 考慮目標受眾的脆弱性
 - 分析攻擊的複雜程度
@@ -192,7 +203,17 @@ export const ANALYSIS_USER_PROMPT_TEMPLATE = `請分析以下郵件內容，判�
 {emailContent}
 ---
 
-請根據你的專業知識進行全面分析，並以指定的 JSON 格式回應。在分析時請考慮當前時間背景，特別注意是否有利用時事、節日或特定時間點的詐騙手法。`;
+## 分析指導
+
+請根據你的專業知識進行全面分析。**重要提醒**：
+
+1. **優先考慮技術分析**：如果郵件包含任何連結、提及域名、包含附件，或發件人資訊需要驗證，強烈建議先進行深度技術檢查，這可以發現許多隱藏的安全風險。
+
+2. **不要僅依賴表面分析**：即使郵件看起來正常，技術層面的分析往往能揭示更多資訊。
+
+3. **全面性檢查**：結合內容分析、技術驗證和風險評估，提供最準確的判斷。
+
+請以指定的 JSON 格式回應。在分析時請考慮當前時間背景，特別注意是否有利用時事、節日或特定時間點的詐騙手法。`;
 
 /**
  * 獲取當前日期時間的格式化字串
@@ -223,4 +244,39 @@ export function generateAnalysisPrompt(emailContent: string): string {
     '{currentDateTime}',
     currentDateTime
   ).replace('{emailContent}', emailContent);
+}
+
+/**
+ * 工具分析結果整合提示詞
+ */
+export const TOOL_ANALYSIS_PROMPT_TEMPLATE = `基於以下工具分析結果，請重新評估郵件的釣魚風險並提供最終判斷：
+
+## 工具分析結果
+{toolResults}
+
+請結合之前的初步分析和這些工具提供的詳細技術分析結果，給出更準確的最終判斷。特別注意：
+
+1. **URL 分析結果**：如果發現高風險 URL，應提高警戒等級
+2. **域名檢查結果**：注意域名的可信度和是否冒充知名品牌
+3. **郵件標頭分析**：檢查是否有偽造發件人或路由異常
+4. **附件掃描結果**：評估附件的安全風險
+
+請以相同的 JSON 格式回應，並在 explanation 中整合工具分析的發現。`;
+
+/**
+ * 生成工具分析整合提示詞
+ */
+export function generateToolAnalysisPrompt(
+  toolResults: Record<string, unknown>
+): string {
+  const formattedResults = Object.entries(toolResults)
+    .map(([toolName, result]) => {
+      return `### ${toolName}\n${typeof result === 'string' ? result : JSON.stringify(result, null, 2)}`;
+    })
+    .join('\n\n');
+
+  return TOOL_ANALYSIS_PROMPT_TEMPLATE.replace(
+    '{toolResults}',
+    formattedResults
+  );
 }

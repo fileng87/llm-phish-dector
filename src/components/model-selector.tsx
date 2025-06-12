@@ -13,6 +13,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import { Switch } from '@/components/ui/switch';
 import { ModelConfigLoader } from '@/lib/model-config-loader';
 import { type ModelSelectionConfig, modelConfigStorage } from '@/lib/storage';
 import { ModelOption } from '@/types/model-config';
@@ -34,6 +35,7 @@ export function ModelSelector({
   const [selectedModel, setSelectedModel] = React.useState<string>('');
   const [customModel, setCustomModel] = React.useState<string>('');
   const [temperature, setTemperature] = React.useState<number>(0.7);
+  const [useTools, setUseTools] = React.useState<boolean>(false);
   const [modelOptions, setModelOptions] = React.useState<ModelOption[]>([]);
   const [providerNames, setProviderNames] = React.useState<
     Record<string, string>
@@ -69,7 +71,10 @@ export function ModelSelector({
 
         // 如果沒有初始設定，自動選擇第一個可用的模型
         if (!isInitialized && options.length > 0 && !options[0].isCustom) {
-          setSelectedModel(options[0].id);
+          const firstModel = options[0];
+          setSelectedModel(firstModel.id);
+          // 根據模型配置自動設定工具調用
+          setUseTools(firstModel.supportsToolCalling || false);
         }
       } catch (error) {
         console.error('載入模型選項失敗:', {
@@ -110,12 +115,16 @@ export function ModelSelector({
         if (modelOption) {
           setSelectedModel(config.model);
           setCustomModel('');
+          // 預設模型根據配置自動設定工具調用
+          setUseTools(modelOption.supportsToolCalling || false);
         } else {
           // 如果不在預設選項中，設為自訂模型
           const customOption = options.find((option) => option.isCustom);
           if (customOption) {
             setSelectedModel(customOption.id);
             setCustomModel(config.model);
+            // 自訂模型使用配置中的設定，如果沒有則預設為 false
+            setUseTools(config.useTools || false);
           }
         }
 
@@ -224,6 +233,16 @@ export function ModelSelector({
     setSelectedModel(modelId);
     if (modelId === '__custom__') {
       setCustomModel('');
+      // 自訂模型預設關閉工具調用，讓用戶手動選擇
+      setUseTools(false);
+    } else {
+      // 預設模型根據配置自動啟用工具調用
+      const modelOption = modelOptions.find((option) => option.id === modelId);
+      if (modelOption && modelOption.supportsToolCalling) {
+        setUseTools(true);
+      } else {
+        setUseTools(false);
+      }
     }
   };
 
@@ -251,6 +270,7 @@ export function ModelSelector({
           provider: selectedProvider,
           model: finalModel,
           temperature: temperature,
+          useTools: useTools,
         });
       }
     }
@@ -259,6 +279,7 @@ export function ModelSelector({
     selectedModel,
     customModel,
     temperature,
+    useTools,
     onConfigChange,
   ]);
 
@@ -359,6 +380,89 @@ export function ModelSelector({
               </div>
             </div>
           </div>
+
+          {/* 預設模型的工具調用狀態顯示 */}
+          {!isCustomSelected && currentModelOption && (
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <div className="space-y-0.5">
+                  <Label className="flex items-center gap-2">
+                    <Zap className="h-4 w-4" />
+                    工具調用功能
+                  </Label>
+                  <p className="text-xs text-muted-foreground">
+                    {currentModelOption.supportsToolCalling
+                      ? '此模型支援深度技術分析，已自動啟用'
+                      : '此模型不支援工具調用功能'}
+                  </p>
+                </div>
+                <div className="flex items-center gap-2">
+                  {currentModelOption.supportsToolCalling ? (
+                    <Badge
+                      variant="default"
+                      className="bg-green-500/20 text-green-700 dark:text-green-400 border-green-500/30 font-medium"
+                    >
+                      <Zap className="h-3 w-3 mr-1" />
+                      已啟用
+                    </Badge>
+                  ) : (
+                    <>
+                      <div className="h-2 w-2 bg-gray-400 rounded-full"></div>
+                      <Badge
+                        variant="secondary"
+                        className="bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400 border-gray-300 dark:border-gray-600"
+                      >
+                        不支援
+                      </Badge>
+                    </>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* 工具調用設定 - 只在自訂模型時顯示 */}
+          {isCustomSelected && (
+            <div className="space-y-3">
+              <div className="p-4 border border-blue-200 dark:border-blue-800/30 rounded-lg bg-blue-50/50 dark:bg-blue-950/20">
+                <div className="flex items-center justify-between">
+                  <div className="space-y-1">
+                    <Label
+                      htmlFor="use-tools"
+                      className="flex items-center gap-2 text-base font-medium"
+                    >
+                      <Zap className="h-4 w-4 text-blue-600 dark:text-blue-400" />
+                      啟用工具調用功能
+                    </Label>
+                    <p className="text-xs text-blue-700 dark:text-blue-300">
+                      讓自訂模型使用深度技術分析工具進行更準確的釣魚郵件檢測
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <Switch
+                      id="use-tools"
+                      checked={useTools}
+                      onCheckedChange={setUseTools}
+                      disabled={!selectedProvider}
+                      className="scale-125 data-[state=checked]:bg-green-500"
+                    />
+                  </div>
+                </div>
+                {!useTools && (
+                  <div className="mt-3 p-3 bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-800/30 rounded-lg">
+                    <div className="flex items-start gap-2">
+                      <div className="h-4 w-4 border-2 border-amber-500 rounded-full flex items-center justify-center mt-0.5 flex-shrink-0">
+                        <div className="h-1.5 w-1.5 bg-amber-500 rounded-full"></div>
+                      </div>
+                      <p className="text-xs text-amber-700 dark:text-amber-300">
+                        建議啟用工具調用功能以獲得更準確的分析結果
+                      </p>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
         </div>
 
         {/* 自訂模型輸入 */}
