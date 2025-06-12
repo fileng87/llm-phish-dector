@@ -29,9 +29,11 @@ interface WorkflowState {
   currentStep:
     | 'initial_analysis'
     | 'tool_calling'
+    | 'continue_analysis'
     | 'final_analysis'
     | 'completed';
   currentStepDescription?: string;
+  toolCallCount?: number; // 追蹤工具調用次數
 }
 
 /**
@@ -69,6 +71,7 @@ export class PhishingAnalysisWorkflow {
         finalResult: null,
         useTools: null,
         currentStep: null,
+        toolCallCount: null,
       },
     });
 
@@ -77,6 +80,7 @@ export class PhishingAnalysisWorkflow {
 
     if (useTools) {
       workflow.addNode('tool_calling', this.toolCalling.bind(this));
+      workflow.addNode('continue_analysis', this.continueAnalysis.bind(this));
       workflow.addNode('final_analysis', this.finalAnalysis.bind(this));
     }
 
@@ -85,6 +89,7 @@ export class PhishingAnalysisWorkflow {
     workflow.addEdge(START, 'initial_analysis' as any);
 
     if (useTools) {
+      // 初始分析後的決策
       workflow.addConditionalEdges(
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         'initial_analysis' as any,
@@ -96,8 +101,25 @@ export class PhishingAnalysisWorkflow {
           no_tools: 'final_analysis' as any,
         }
       );
+
+      // 工具調用後進入繼續分析節點
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      workflow.addEdge('tool_calling' as any, 'final_analysis' as any);
+      workflow.addEdge('tool_calling' as any, 'continue_analysis' as any);
+
+      // 繼續分析後的決策：是否需要更多工具或進入最終分析
+      workflow.addConditionalEdges(
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        'continue_analysis' as any,
+        this.shouldContinueWithTools.bind(this),
+        {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          continue_tools: 'tool_calling' as any,
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          finish_analysis: 'final_analysis' as any,
+        }
+      );
+
+      // 最終分析結束
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       workflow.addEdge('final_analysis' as any, END);
     } else {
@@ -114,8 +136,10 @@ export class PhishingAnalysisWorkflow {
   private async initialAnalysis(
     state: WorkflowState
   ): Promise<Partial<WorkflowState>> {
-    console.log('開始初始分析...');
-    console.log('工作流 useTools 設定:', state.useTools);
+    console.log('\n🎯 開始初始分析...');
+    console.log(`⚙️  工作流 useTools 設定: ${state.useTools}`);
+    console.log(`📧 郵件內容長度: ${state.emailContent.length} 字符`);
+    console.log(`📝 郵件內容預覽: ${state.emailContent.substring(0, 150)}...`);
 
     const messages = [
       new SystemMessage(PHISHING_DETECTION_SYSTEM_PROMPT),
@@ -123,9 +147,15 @@ export class PhishingAnalysisWorkflow {
     ];
 
     try {
+      console.log('\n🧠 向 AI 發送初始分析請求...');
       const response = await this.modelWithTools.invoke(messages);
-      console.log('模型回應類型:', response.constructor.name);
-      console.log('模型回應內容長度:', response.content.toString().length);
+
+      console.log('📨 模型回應詳情:');
+      console.log(`   類型: ${response.constructor.name}`);
+      console.log(`   內容長度: ${response.content.toString().length} 字符`);
+      console.log(
+        `   內容預覽: ${response.content.toString().substring(0, 200)}...`
+      );
 
       // 檢查是否有工具調用
       if (
@@ -133,21 +163,33 @@ export class PhishingAnalysisWorkflow {
         response.tool_calls &&
         response.tool_calls.length > 0
       ) {
-        console.log(`✅ 檢測到 ${response.tool_calls.length} 個工具調用`);
+        console.log(
+          `\n🛠️  檢測到 ${response.tool_calls.length} 個工具調用需求:`
+        );
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         response.tool_calls.forEach((toolCall: any, index: number) => {
-          console.log(`工具 ${index + 1}: ${toolCall.name}`, toolCall.args);
+          console.log(`   ${index + 1}. ${toolCall.name}`);
+          console.log(`      參數: ${JSON.stringify(toolCall.args, null, 2)}`);
         });
+        console.log('🚀 準備執行工具調用階段');
+
         return {
           messages: [...messages, response],
           currentStep: 'tool_calling',
           currentStepDescription: `正在執行 ${response.tool_calls.length} 個分析工具`,
+          toolCallCount: (state.toolCallCount || 0) + 1,
         };
       } else {
-        console.log('❌ 無工具調用，直接完成分析');
-        console.log('response.tool_calls:', response.tool_calls);
+        console.log('\n📋 無工具調用需求，直接完成分析');
+        console.log(
+          `🔍 工具調用狀態: ${response.tool_calls ? '存在但為空' : '不存在'}`
+        );
+        console.log('🎯 開始解析最終結果');
+
         // 直接解析結果
         const result = await this.parseResult(response.content.toString());
+        console.log('✅ 初始分析完成');
+
         return {
           messages: [...messages, response],
           finalResult: result,
@@ -156,6 +198,8 @@ export class PhishingAnalysisWorkflow {
         };
       }
     } catch (error) {
+      console.log('\n❌ 初始分析執行失敗:');
+      console.log('🐛 錯誤詳情:', error);
       throw new Error(
         `初始分析失敗: ${error instanceof Error ? error.message : '未知錯誤'}`
       );
@@ -168,22 +212,68 @@ export class PhishingAnalysisWorkflow {
   private async toolCalling(
     state: WorkflowState
   ): Promise<Partial<WorkflowState>> {
-    console.log('開始執行工具調用...');
+    console.log('🔧 開始執行工具調用...');
+    console.log(`📊 當前工具調用輪次: ${state.toolCallCount || 0}`);
 
     const lastMessage = state.messages[state.messages.length - 1] as AIMessage;
     const toolResults: Record<string, unknown> = { ...state.toolResults };
     const toolMessages: ToolMessage[] = [];
 
     if (lastMessage.tool_calls) {
+      console.log(`🛠️  準備執行 ${lastMessage.tool_calls.length} 個工具:`);
+      lastMessage.tool_calls.forEach((toolCall, index) => {
+        console.log(
+          `   ${index + 1}. ${toolCall.name} - 參數:`,
+          JSON.stringify(toolCall.args, null, 2)
+        );
+      });
+
       for (const toolCall of lastMessage.tool_calls) {
-        console.log(`執行工具: ${toolCall.name}`);
+        const startTime = Date.now();
+        console.log(`\n🚀 執行工具: ${toolCall.name}`);
+        console.log(`📝 工具參數:`, JSON.stringify(toolCall.args, null, 2));
+
         try {
           const tool = getToolByName(toolCall.name);
           if (tool) {
+            console.log(`⏱️  工具開始執行時間: ${new Date().toISOString()}`);
+
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
             const result = await (tool as any).invoke(toolCall.args);
+            const executionTime = Date.now() - startTime;
+
             toolResults[toolCall.name] = result;
-            console.log(`工具 ${toolCall.name} 執行成功`);
+
+            console.log(`✅ 工具 ${toolCall.name} 執行成功`);
+            console.log(`⏱️  執行時間: ${executionTime}ms`);
+            console.log(
+              `📄 結果長度: ${typeof result === 'string' ? result.length : JSON.stringify(result).length} 字符`
+            );
+
+            // 解析並顯示結果摘要
+            try {
+              const parsedResult =
+                typeof result === 'string' ? JSON.parse(result) : result;
+              if (parsedResult && typeof parsedResult === 'object') {
+                console.log(`📈 結果摘要:`);
+                Object.keys(parsedResult).forEach((key) => {
+                  const value = parsedResult[key];
+                  if (Array.isArray(value)) {
+                    console.log(`   ${key}: ${value.length} 項目`);
+                  } else if (typeof value === 'object') {
+                    console.log(
+                      `   ${key}: 物件 (${Object.keys(value).length} 屬性)`
+                    );
+                  } else {
+                    console.log(`   ${key}: ${value}`);
+                  }
+                });
+              }
+            } catch {
+              console.log(
+                `📄 原始結果預覽: ${result.toString().substring(0, 200)}...`
+              );
+            }
 
             toolMessages.push(
               new ToolMessage({
@@ -191,9 +281,22 @@ export class PhishingAnalysisWorkflow {
                 tool_call_id: toolCall.id || toolCall.name,
               })
             );
+          } else {
+            console.log(`❌ 找不到工具: ${toolCall.name}`);
+            const errorMessage = `工具 ${toolCall.name} 不存在`;
+            toolMessages.push(
+              new ToolMessage({
+                content: errorMessage,
+                tool_call_id: toolCall.id || toolCall.name,
+              })
+            );
           }
         } catch (error) {
-          console.log(`工具 ${toolCall.name} 執行失敗:`, error);
+          const executionTime = Date.now() - startTime;
+          console.log(`❌ 工具 ${toolCall.name} 執行失敗:`);
+          console.log(`⏱️  執行時間: ${executionTime}ms`);
+          console.log(`🐛 錯誤詳情:`, error);
+
           const errorMessage = `工具 ${toolCall.name} 執行失敗: ${error instanceof Error ? error.message : '未知錯誤'}`;
           toolMessages.push(
             new ToolMessage({
@@ -205,13 +308,104 @@ export class PhishingAnalysisWorkflow {
       }
     }
 
-    console.log('工具調用完成，準備進行最終分析');
+    console.log('\n🏁 工具調用完成，準備進行繼續分析');
+    console.log(`📊 累計工具結果數量: ${Object.keys(toolResults).length}`);
+    console.log(`📝 工具結果清單: ${Object.keys(toolResults).join(', ')}`);
+
     return {
       messages: [...state.messages, ...toolMessages],
       toolResults,
-      currentStep: 'final_analysis',
-      currentStepDescription: '正在整合工具分析結果',
+      currentStep: 'continue_analysis',
+      currentStepDescription: '正在評估是否需要更多工具分析',
     };
+  }
+
+  /**
+   * 繼續分析步驟 - 決定是否需要更多工具調用
+   */
+  private async continueAnalysis(
+    state: WorkflowState
+  ): Promise<Partial<WorkflowState>> {
+    console.log('\n🤔 開始繼續分析評估...');
+    console.log(`📊 當前工具調用次數: ${state.toolCallCount || 0}`);
+    console.log(
+      `🗂️  已收集的工具結果: ${Object.keys(state.toolResults).length} 個`
+    );
+    console.log(`📝 工具結果詳情:`);
+    Object.entries(state.toolResults).forEach(([toolName, result]) => {
+      const resultLength =
+        typeof result === 'string'
+          ? result.length
+          : JSON.stringify(result).length;
+      console.log(`   - ${toolName}: ${resultLength} 字符`);
+    });
+
+    // 創建一個提示詞，讓 AI 決定是否需要更多工具
+    const continuePrompt = `
+基於目前已收集的資訊，請評估是否需要使用更多工具進行深入分析。
+
+已執行的工具結果：
+${Object.entries(state.toolResults)
+  .map(
+    ([toolName, result]) =>
+      `### ${toolName}\n${typeof result === 'string' ? result : JSON.stringify(result, null, 2)}`
+  )
+  .join('\n\n')}
+
+請考慮以下因素：
+1. 是否還有未分析的連結、域名或附件？
+2. 是否需要更多資訊來驗證郵件的真實性？
+3. 當前的分析結果是否足夠做出準確判斷？
+
+如果需要使用更多工具，請調用相應的工具。
+如果已收集足夠資訊，請回應 "ANALYSIS_COMPLETE" 表示可以進行最終分析。
+`;
+
+    const messages = [...state.messages, new HumanMessage(continuePrompt)];
+
+    try {
+      console.log('\n🧠 向 AI 發送繼續分析請求...');
+      const response = await this.modelWithTools.invoke(messages);
+
+      console.log('📨 AI 回應內容預覽:');
+      console.log(response.content.toString().substring(0, 300) + '...');
+      console.log(`📏 回應總長度: ${response.content.toString().length} 字符`);
+
+      // 檢查是否有新的工具調用
+      if (response.tool_calls && response.tool_calls.length > 0) {
+        console.log(`\n🔄 AI 決定需要更多工具分析！`);
+        console.log(`🛠️  檢測到 ${response.tool_calls.length} 個新工具調用:`);
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        response.tool_calls.forEach((toolCall: any, index: number) => {
+          console.log(`   ${index + 1}. ${toolCall.name}`);
+        });
+        console.log(
+          `📈 即將進入第 ${(state.toolCallCount || 0) + 1} 輪工具調用`
+        );
+
+        return {
+          messages: [...messages, response],
+          currentStep: 'tool_calling',
+          currentStepDescription: `正在執行額外的 ${response.tool_calls.length} 個分析工具`,
+          toolCallCount: (state.toolCallCount || 0) + 1,
+        };
+      } else {
+        console.log('\n✅ AI 決定分析完成，準備進行最終評估');
+        console.log('🎯 進入最終分析階段');
+        return {
+          messages: [...messages, response],
+          currentStep: 'final_analysis',
+          currentStepDescription: '正在整合所有分析結果',
+        };
+      }
+    } catch (error) {
+      console.log('\n❌ 繼續分析失敗，直接進入最終分析:');
+      console.log('🐛 錯誤詳情:', error);
+      return {
+        currentStep: 'final_analysis',
+        currentStepDescription: '正在整合分析結果',
+      };
+    }
   }
 
   /**
@@ -220,11 +414,15 @@ export class PhishingAnalysisWorkflow {
   private async finalAnalysis(
     state: WorkflowState
   ): Promise<Partial<WorkflowState>> {
+    console.log('\n🎯 開始最終分析步驟...');
+
     // 檢查是否有有效的工具結果
     const hasValidToolResults = Object.keys(state.toolResults).length > 0;
+    console.log(`🗂️  工具結果檢查: ${hasValidToolResults ? '有效' : '無效'}`);
+    console.log(`📊 工具結果數量: ${Object.keys(state.toolResults).length}`);
 
     if (!hasValidToolResults) {
-      console.log('沒有工具結果，跳過最終分析步驟');
+      console.log('⚠️  沒有工具結果，跳過最終分析步驟');
       // 如果沒有工具結果，直接返回初始分析的結果
       // 從 messages 中找到最後一個 AI 回應
       const lastAIMessage = state.messages
@@ -262,15 +460,43 @@ export class PhishingAnalysisWorkflow {
     }
 
     // 有工具結果時，進行正常的最終分析
+    console.log('\n🔄 進行完整的最終分析...');
+    console.log('📝 工具結果摘要:');
+    Object.entries(state.toolResults).forEach(([toolName, result]) => {
+      const resultLength =
+        typeof result === 'string'
+          ? result.length
+          : JSON.stringify(result).length;
+      console.log(`   - ${toolName}: ${resultLength} 字符`);
+    });
+
     const toolAnalysisPrompt = generateToolAnalysisPrompt(state.toolResults);
+    console.log(`📏 最終分析提示詞長度: ${toolAnalysisPrompt.length} 字符`);
+
     const finalMessages = [
       ...state.messages,
       new HumanMessage(toolAnalysisPrompt),
     ];
 
     try {
+      console.log('\n🧠 向 AI 發送最終分析請求...');
       const response = await this.modelWithTools.invoke(finalMessages);
+
+      console.log('📨 最終分析回應:');
+      console.log(`   內容長度: ${response.content.toString().length} 字符`);
+      console.log(
+        `   內容預覽: ${response.content.toString().substring(0, 200)}...`
+      );
+
+      console.log('🎯 開始解析最終結果...');
       const result = await this.parseResult(response.content.toString());
+
+      console.log('✅ 最終分析完成！');
+      console.log(`📊 分析結果摘要:`);
+      console.log(`   是否釣魚: ${result.isPhishing}`);
+      console.log(`   信心分數: ${result.confidenceScore}`);
+      console.log(`   風險等級: ${result.riskLevel}`);
+      console.log(`   可疑點數量: ${result.suspiciousPoints.length}`);
 
       return {
         messages: [...finalMessages, response],
@@ -279,6 +505,8 @@ export class PhishingAnalysisWorkflow {
         currentStepDescription: '分析完成',
       };
     } catch (error) {
+      console.log('\n❌ 最終分析執行失敗:');
+      console.log('🐛 錯誤詳情:', error);
       throw new Error(
         `最終分析失敗: ${error instanceof Error ? error.message : '未知錯誤'}`
       );
@@ -299,6 +527,39 @@ export class PhishingAnalysisWorkflow {
     }
 
     return 'no_tools';
+  }
+
+  /**
+   * 判斷是否需要繼續使用工具
+   */
+  private shouldContinueWithTools(state: WorkflowState): string {
+    // 設定最大工具調用次數限制，避免無限循環
+    const maxToolCalls = 5;
+    const currentToolCalls = state.toolCallCount || 0;
+
+    if (currentToolCalls >= maxToolCalls) {
+      console.log(`已達到最大工具調用次數限制 (${maxToolCalls})，結束分析`);
+      return 'finish_analysis';
+    }
+
+    const lastMessage = state.messages[state.messages.length - 1] as AIMessage;
+
+    // 檢查是否有新的工具調用
+    if (lastMessage.tool_calls && lastMessage.tool_calls.length > 0) {
+      console.log('檢測到新的工具調用需求，繼續分析');
+      return 'continue_tools';
+    }
+
+    // 檢查回應內容是否包含完成標記
+    const content = lastMessage.content.toString().toLowerCase();
+    if (content.includes('analysis_complete') || content.includes('分析完成')) {
+      console.log('AI 表示分析完成，進入最終分析');
+      return 'finish_analysis';
+    }
+
+    // 預設情況下結束分析
+    console.log('無更多工具調用需求，進入最終分析');
+    return 'finish_analysis';
   }
 
   /**
@@ -385,6 +646,7 @@ export class PhishingAnalysisWorkflow {
       toolResults: {},
       useTools,
       currentStep: 'initial_analysis',
+      toolCallCount: 0,
     };
 
     try {
