@@ -18,6 +18,16 @@ export interface AnalysisRequest {
     apiKey: string; // API 金鑰
     useTools?: boolean; // 是否使用工具調用
   };
+  toolSettings?: {
+    enabledTools: string[]; // 啟用的工具列表
+    toolConfigs: Record<
+      string,
+      {
+        apiKey?: string;
+        settings?: Record<string, unknown>;
+      }
+    >; // 工具配置
+  };
 }
 
 // JSON Schema 用於結構化輸出

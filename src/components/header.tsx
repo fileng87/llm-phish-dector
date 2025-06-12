@@ -2,8 +2,11 @@
 
 import * as React from 'react';
 
+import { ToolConfig } from '@/lib/storage';
+
 import { SettingsDialog } from './settings-dialog';
 import { ThemeToggle } from './theme-toggle';
+import { ToolsConfigDialog } from './tools-config-dialog';
 
 interface ModelConfig {
   provider: string;
@@ -14,11 +17,15 @@ interface ModelConfig {
 interface HeaderProps {
   providerConfigs: Record<string, ModelConfig>;
   onProviderConfigsChange: (configs: Record<string, ModelConfig>) => void;
+  toolConfigs: Record<string, ToolConfig>;
+  onToolConfigsChange: (configs: Record<string, ToolConfig>) => void;
 }
 
 export function Header({
   providerConfigs,
   onProviderConfigsChange,
+  toolConfigs,
+  onToolConfigsChange,
 }: HeaderProps) {
   return (
     <header className="sticky top-0 z-50 w-full border-b glass backdrop-blur-sm">
@@ -48,6 +55,10 @@ export function Header({
           </div>
 
           <div className="flex items-center space-x-4">
+            <ToolsConfigDialog
+              toolConfigs={toolConfigs}
+              onToolConfigsChange={onToolConfigsChange}
+            />
             <SettingsDialog
               providerConfigs={providerConfigs}
               onProviderConfigsChange={onProviderConfigsChange}

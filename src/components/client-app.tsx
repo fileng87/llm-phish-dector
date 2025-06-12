@@ -8,8 +8,10 @@ import { HeroSection } from '@/components/hero-section';
 import { ModelSelector } from '@/components/model-selector';
 import {
   type ModelSelectionConfig,
+  type ToolConfig,
   apiKeyStorage,
   modelConfigStorage,
+  toolConfigStorage,
 } from '@/lib/storage';
 
 interface ModelConfig {
@@ -31,10 +33,15 @@ export function ClientApp() {
     Record<string, ModelConfig>
   >({});
 
+  // 工具配置狀態
+  const [toolConfigs, setToolConfigs] = React.useState<
+    Record<string, ToolConfig>
+  >({});
+
   // 初始化狀態
   const [isInitialized, setIsInitialized] = React.useState(false);
 
-  // 初始化供應商配置和模型設定
+  // 初始化供應商配置、工具配置和模型設定
   React.useEffect(() => {
     const initializeConfigs = () => {
       // 載入所有 API 金鑰
@@ -51,6 +58,10 @@ export function ClientApp() {
       });
 
       setProviderConfigs(configs);
+
+      // 載入工具配置
+      const allToolConfigs = toolConfigStorage.getAll();
+      setToolConfigs(allToolConfigs);
 
       // 載入上次使用的模型設定
       const lastUsedConfig = modelConfigStorage.getLastUsed();
@@ -73,6 +84,13 @@ export function ClientApp() {
       .filter(([, config]) => config.isEnabled && config.apiKey)
       .map(([providerId]) => providerId);
   }, [providerConfigs]);
+
+  // 獲取已啟用的工具列表
+  const enabledTools = React.useMemo(() => {
+    return Object.entries(toolConfigs)
+      .filter(([, config]) => config.isEnabled && config.apiKey)
+      .map(([toolId]) => toolId);
+  }, [toolConfigs]);
 
   const handleModelConfigChange = React.useCallback(
     (config: ModelSelectionConfig) => {
@@ -105,11 +123,20 @@ export function ClientApp() {
     [modelConfig]
   );
 
+  const handleToolConfigsChange = React.useCallback(
+    (configs: Record<string, ToolConfig>) => {
+      setToolConfigs(configs);
+    },
+    []
+  );
+
   return (
     <>
       <Header
         providerConfigs={providerConfigs}
         onProviderConfigsChange={handleProviderConfigsChange}
+        toolConfigs={toolConfigs}
+        onToolConfigsChange={handleToolConfigsChange}
       />
 
       <main className="container mx-auto px-4 sm:px-6 lg:px-8 py-8">
@@ -127,7 +154,11 @@ export function ClientApp() {
           )}
 
           {/* 主要功能區域 */}
-          <EmailAnalyzer modelConfig={modelConfig} />
+          <EmailAnalyzer
+            modelConfig={modelConfig}
+            toolConfigs={toolConfigs}
+            enabledTools={enabledTools}
+          />
         </div>
       </main>
     </>

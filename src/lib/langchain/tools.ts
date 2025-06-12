@@ -1,5 +1,6 @@
 import { DuckDuckGoSearch } from '@langchain/community/tools/duckduckgo_search';
 import { DynamicStructuredTool } from '@langchain/core/tools';
+import { TavilySearch } from '@langchain/tavily';
 import { z } from 'zod';
 
 /**
@@ -56,10 +57,18 @@ export const duckDuckGoSearchTool = new DynamicStructuredTool({
       // 解析搜尋結果
       let results;
       try {
-        results = JSON.parse(searchResults);
+        // DuckDuckGoSearch 可能回傳一個包含 "No good DuckDuckGo Search results found" 的字串
+        if (
+          typeof searchResults === 'string' &&
+          searchResults.includes('No good DuckDuckGo Search results found')
+        ) {
+          results = [];
+        } else {
+          results = JSON.parse(searchResults);
+        }
       } catch {
-        // 如果結果不是 JSON 格式，直接使用字串結果
-        results = searchResults;
+        // 如果結果不是 JSON 格式，且不是空字串，直接使用字串結果
+        results = searchResults && searchResults.trim() ? searchResults : [];
       }
 
       // 分析搜尋結果
@@ -94,16 +103,62 @@ export const duckDuckGoSearchTool = new DynamicStructuredTool({
 
       return JSON.stringify(analysis);
     } catch (error) {
+      console.error('DuckDuckGo Search Tool 發生嚴重錯誤:', error);
       return JSON.stringify({
         query,
         error: true,
-        message: `搜尋失敗: ${error instanceof Error ? error.message : '未知錯誤'}`,
+        message: `搜尋失敗: ${
+          error instanceof Error ? error.message : '未知錯誤'
+        }`,
+        details:
+          error instanceof Error && error.stack
+            ? error.stack
+            : JSON.stringify(error),
         analysis: '無法完成網路搜尋，可能是網路連線問題或搜尋服務暫時不可用',
         timestamp: new Date().toISOString(),
       });
     }
   },
 });
+
+/**
+ * 創建並返回一個配置好的 Tavily 搜尋工具。
+ * 這個工具使用 Tavily Search API，它是一個專為 LLM 設計的搜尋引擎，
+ * 提供更乾淨、與 AI 更相關的搜尋結果。
+ *
+ * @param apiKey - 用於 Tavily API 的金鑰。
+ * @returns 配置好的 Tavily 搜尋工具實例。
+ */
+export function createTavilySearchTool(apiKey: string): TavilySearch {
+  // 技巧：TavilySearch 工具預設從 process.env 讀取金鑰。
+  // 為了支持從前端動態傳入，我們在此處臨時設定它。
+  const originalApiKey = process.env.TAVILY_API_KEY;
+  process.env.TAVILY_API_KEY = apiKey;
+
+  try {
+    const tool = new TavilySearch({ maxResults: 5 });
+
+    // 恢復原始的環境變數，確保金鑰不會在伺服器端殘留
+    if (originalApiKey) {
+      process.env.TAVILY_API_KEY = originalApiKey;
+    } else {
+      delete process.env.TAVILY_API_KEY;
+    }
+
+    // 讓工具使用預設的描述
+    // tool.description = ... (移除覆寫)
+
+    return tool;
+  } catch (error) {
+    // 如果在工具創建過程中出錯，也要確保恢復環境變數
+    if (originalApiKey) {
+      process.env.TAVILY_API_KEY = originalApiKey;
+    } else {
+      delete process.env.TAVILY_API_KEY;
+    }
+    throw error;
+  }
+}
 
 /**
  * 所有可用的工具

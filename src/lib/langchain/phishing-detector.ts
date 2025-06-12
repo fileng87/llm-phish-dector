@@ -78,7 +78,17 @@ export class PhishingDetector {
    */
   async analyzeEmail(
     emailContent: string,
-    useTools: boolean = false
+    useTools: boolean = false,
+    toolSettings?: {
+      enabledTools: string[];
+      toolConfigs: Record<
+        string,
+        {
+          apiKey?: string;
+          settings?: Record<string, unknown>;
+        }
+      >;
+    }
   ): Promise<PhishingDetectionResult> {
     try {
       // 驗證輸入
@@ -88,7 +98,24 @@ export class PhishingDetector {
 
       // 如果支援工具調用且要求使用工具，使用工作流
       if (this.supportsToolCalling && useTools && this.workflow) {
-        return await this.workflow.analyze(emailContent);
+        // 檢查是否有啟用的工具和對應的 API 金鑰
+        if (!toolSettings || !toolSettings.enabledTools.length) {
+          throw new PhishingAnalysisError(
+            '使用工具需要至少啟用一個工具',
+            'NO_TOOLS_ENABLED'
+          );
+        }
+
+        // 檢查 Tavily API 金鑰（目前主要支援的工具）
+        const tavilyConfig = toolSettings.toolConfigs['tavily'];
+        if (!tavilyConfig?.apiKey) {
+          throw new PhishingAnalysisError(
+            '使用搜尋工具需要提供 Tavily API 金鑰',
+            'TAVILY_API_KEY_REQUIRED'
+          );
+        }
+
+        return await this.workflow.analyze(emailContent, tavilyConfig.apiKey);
       }
 
       // 否則使用傳統方式
@@ -494,9 +521,21 @@ export async function analyzePhishingEmail(
   console.log('useTools 設定:', useTools);
   console.log('模型提供商:', modelConfig.provider);
   console.log('模型名稱:', modelConfig.model);
+  console.log('工具設定:', request.toolSettings);
 
   const detector = new PhishingDetector(modelConfig, useTools);
   console.log('模型是否支援工具調用:', detector.canUseTools);
 
-  return await detector.analyzeEmail(request.emailContent, useTools);
+  if (useTools && !detector.canUseTools) {
+    throw new PhishingAnalysisError(
+      `模型 ${modelConfig.model} 不支援工具調用，請選擇其他模型或關閉工具使用`,
+      'TOOLS_NOT_SUPPORTED'
+    );
+  }
+
+  return await detector.analyzeEmail(
+    request.emailContent,
+    useTools,
+    request.toolSettings
+  );
 }

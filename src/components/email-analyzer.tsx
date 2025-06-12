@@ -17,7 +17,7 @@ import {
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { usePhishingAnalysis } from '@/hooks/use-phishing-analysis';
-import { apiKeyStorage } from '@/lib/storage';
+import { ToolConfig, apiKeyStorage } from '@/lib/storage';
 import {
   AlertTriangle,
   CheckCircle,
@@ -42,9 +42,15 @@ interface ModelSelectionConfig {
 
 interface EmailAnalyzerProps {
   modelConfig: ModelSelectionConfig | null;
+  toolConfigs: Record<string, ToolConfig>;
+  enabledTools: string[];
 }
 
-export function EmailAnalyzer({ modelConfig }: EmailAnalyzerProps) {
+export function EmailAnalyzer({
+  modelConfig,
+  toolConfigs,
+  enabledTools,
+}: EmailAnalyzerProps) {
   const [emailContent, setEmailContent] = React.useState('');
   const [parsedEmailData, setParsedEmailData] =
     React.useState<ParsedEmailContent | null>(null);
@@ -67,17 +73,52 @@ export function EmailAnalyzer({ modelConfig }: EmailAnalyzerProps) {
   const handleAnalyze = async () => {
     if (!emailContent.trim() || !modelConfig || !apiKey) return;
 
+    // 準備工具設定
+    const toolSettings =
+      enabledTools.length > 0
+        ? {
+            enabledTools,
+            toolConfigs: Object.fromEntries(
+              enabledTools.map((toolId) => [
+                toolId,
+                {
+                  apiKey: toolConfigs[toolId]?.apiKey,
+                  settings: toolConfigs[toolId]?.settings,
+                },
+              ])
+            ),
+          }
+        : undefined;
+
     await analyzeEmail({
       emailContent,
       modelSettings: {
         ...modelConfig,
         apiKey,
       },
+      toolSettings,
     });
   };
 
   const handleRetry = () => {
     if (!modelConfig || !apiKey) return;
+
+    // 準備工具設定
+    const toolSettings =
+      enabledTools.length > 0
+        ? {
+            enabledTools,
+            toolConfigs: Object.fromEntries(
+              enabledTools.map((toolId) => [
+                toolId,
+                {
+                  apiKey: toolConfigs[toolId]?.apiKey,
+                  settings: toolConfigs[toolId]?.settings,
+                },
+              ])
+            ),
+          }
+        : undefined;
 
     retryAnalysis({
       emailContent,
@@ -85,7 +126,18 @@ export function EmailAnalyzer({ modelConfig }: EmailAnalyzerProps) {
         ...modelConfig,
         apiKey,
       },
+      toolSettings,
     });
+  };
+
+  // 新增：完整重製功能
+  const handleReset = () => {
+    // 清除郵件內容
+    setEmailContent('');
+    // 清除解析結果
+    setParsedEmailData(null);
+    // 重置分析狀態
+    resetAnalysis();
   };
 
   const getConfidenceColor = (score: number) => {
@@ -253,17 +305,6 @@ export function EmailAnalyzer({ modelConfig }: EmailAnalyzerProps) {
                   <CheckCircle className="h-4 w-4 text-success" />
                   <p className="font-medium text-success">已解析的郵件資訊</p>
                 </div>
-                <Button
-                  onClick={() => {
-                    setParsedEmailData(null);
-                    // 可選：恢復到原始內容
-                  }}
-                  variant="ghost"
-                  size="sm"
-                  className="h-6 px-2 text-xs"
-                >
-                  清除
-                </Button>
               </div>
               <p className="text-sm">主題: {parsedEmailData.subject}</p>
               <p className="text-sm">發件人: {parsedEmailData.from}</p>
@@ -299,12 +340,13 @@ export function EmailAnalyzer({ modelConfig }: EmailAnalyzerProps) {
 
             {(isCompleted || hasError) && (
               <Button
-                onClick={resetAnalysis}
+                onClick={handleReset}
                 variant="outline"
                 size="lg"
                 className="glass glass-hover"
               >
-                <RefreshCw className="h-4 w-4" />
+                <RefreshCw className="h-4 w-4 mr-2" />
+                重置
               </Button>
             )}
           </div>
@@ -464,11 +506,40 @@ export function EmailAnalyzer({ modelConfig }: EmailAnalyzerProps) {
                           <span className="flex-shrink-0 w-6 h-6 bg-warning/20 text-warning rounded-full flex items-center justify-center text-xs font-bold">
                             {index + 1}
                           </span>
-                          <div className="flex-1 prose prose-sm max-w-none dark:prose-invert">
-                            <div className="text-sm leading-relaxed">
+                          <div className="flex-1">
+                            <div className="text-sm leading-relaxed text-foreground">
                               <ReactMarkdown
                                 remarkPlugins={[remarkGfm]}
                                 components={{
+                                  p: ({ children }) => (
+                                    <p className="mb-2 last:mb-0">{children}</p>
+                                  ),
+                                  strong: ({ children }) => (
+                                    <strong className="font-semibold text-foreground">
+                                      {children}
+                                    </strong>
+                                  ),
+                                  em: ({ children }) => (
+                                    <em className="italic">{children}</em>
+                                  ),
+                                  code: ({ children }) => (
+                                    <code className="bg-muted px-1 py-0.5 rounded text-sm font-mono">
+                                      {children}
+                                    </code>
+                                  ),
+                                  ul: ({ children }) => (
+                                    <ul className="list-disc list-inside mb-2 space-y-1">
+                                      {children}
+                                    </ul>
+                                  ),
+                                  ol: ({ children }) => (
+                                    <ol className="list-decimal list-inside mb-2 space-y-1">
+                                      {children}
+                                    </ol>
+                                  ),
+                                  li: ({ children }) => (
+                                    <li className="text-sm">{children}</li>
+                                  ),
                                   a: ({ children }) => (
                                     <span className="text-blue-600 dark:text-blue-400 underline">
                                       {children}
@@ -497,21 +568,66 @@ export function EmailAnalyzer({ modelConfig }: EmailAnalyzerProps) {
                   詳細說明
                 </h4>
                 <div className="glass-minimal rounded-lg p-4 border border-black/8 dark:border-white/10">
-                  <div className="prose prose-sm max-w-none dark:prose-invert">
-                    <div className="text-sm leading-relaxed">
-                      <ReactMarkdown
-                        remarkPlugins={[remarkGfm]}
-                        components={{
-                          a: ({ children }) => (
-                            <span className="text-blue-600 dark:text-blue-400 underline">
-                              {children}
-                            </span>
-                          ),
-                        }}
-                      >
-                        {result.explanation}
-                      </ReactMarkdown>
-                    </div>
+                  <div className="text-sm leading-relaxed text-foreground">
+                    <ReactMarkdown
+                      remarkPlugins={[remarkGfm]}
+                      components={{
+                        p: ({ children }) => (
+                          <p className="mb-2 last:mb-0">{children}</p>
+                        ),
+                        strong: ({ children }) => (
+                          <strong className="font-semibold text-foreground">
+                            {children}
+                          </strong>
+                        ),
+                        em: ({ children }) => (
+                          <em className="italic">{children}</em>
+                        ),
+                        code: ({ children }) => (
+                          <code className="bg-muted px-1 py-0.5 rounded text-sm font-mono">
+                            {children}
+                          </code>
+                        ),
+                        ul: ({ children }) => (
+                          <ul className="list-disc list-inside mb-2 space-y-1">
+                            {children}
+                          </ul>
+                        ),
+                        ol: ({ children }) => (
+                          <ol className="list-decimal list-inside mb-2 space-y-1">
+                            {children}
+                          </ol>
+                        ),
+                        li: ({ children }) => (
+                          <li className="text-sm">{children}</li>
+                        ),
+                        h1: ({ children }) => (
+                          <h1 className="text-lg font-bold mb-2">{children}</h1>
+                        ),
+                        h2: ({ children }) => (
+                          <h2 className="text-base font-semibold mb-2">
+                            {children}
+                          </h2>
+                        ),
+                        h3: ({ children }) => (
+                          <h3 className="text-sm font-semibold mb-1">
+                            {children}
+                          </h3>
+                        ),
+                        blockquote: ({ children }) => (
+                          <blockquote className="border-l-4 border-muted pl-4 italic mb-2">
+                            {children}
+                          </blockquote>
+                        ),
+                        a: ({ children }) => (
+                          <span className="text-blue-600 dark:text-blue-400 underline">
+                            {children}
+                          </span>
+                        ),
+                      }}
+                    >
+                      {result.explanation}
+                    </ReactMarkdown>
                   </div>
                 </div>
               </div>

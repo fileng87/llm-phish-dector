@@ -5,9 +5,9 @@ import {
   BaseMessage,
   HumanMessage,
   SystemMessage,
+  ToolMessage,
 } from '@langchain/core/messages';
 import { JsonOutputParser } from '@langchain/core/output_parsers';
-import { Runnable } from '@langchain/core/runnables';
 import { END, START, StateGraph } from '@langchain/langgraph';
 import { ToolNode } from '@langchain/langgraph/prebuilt';
 
@@ -15,7 +15,7 @@ import {
   PHISHING_DETECTION_SYSTEM_PROMPT,
   generateAnalysisPrompt,
 } from './prompts';
-import { availableTools } from './tools';
+import { createTavilySearchTool } from './tools';
 
 /**
  * 定義工作流的狀態。
@@ -40,23 +40,82 @@ const TOOLS_NODE = 'tools';
  * 並給出最終答案為止。
  */
 export class PhishingAnalysisWorkflow {
-  private modelWithTools: Runnable;
+  private model: BaseChatModel;
   private parser: JsonOutputParser;
 
   constructor(model: BaseChatModel) {
     if (!model || !model.bindTools) {
       throw new Error('必須提供一個有效的、支援工具綁定的模型');
     }
-    // 綁定工具到模型，讓模型知道有哪些工具可用
-    this.modelWithTools = model.bindTools(availableTools);
+    this.model = model;
     this.parser = new JsonOutputParser();
   }
 
   /**
-   * 創建並返回已編譯的工作流圖。
+   * 執行分析流程
    */
-  public getWorkflow() {
-    // 1. 初始化 StateGraph，並定義狀態的結構
+  async analyze(
+    emailContent: string,
+    tavilyApiKey: string
+  ): Promise<PhishingDetectionResult> {
+    if (!this.model) {
+      throw new Error('模型未初始化，無法進行分析');
+    }
+    if (!tavilyApiKey) {
+      throw new Error('必須提供 Tavily API 金鑰');
+    }
+
+    console.log('🚀 開始分析工作流...');
+    let lastMessageCount = 0;
+
+    const model = this.model;
+    const tools = [createTavilySearchTool(tavilyApiKey)];
+    const modelWithTools = model.bindTools?.(tools);
+
+    if (!modelWithTools) {
+      throw new Error('無法將工具綁定到模型。模型可能不支援 bindTools 方法。');
+    }
+
+    const agentNode = async (state: WorkflowState) => {
+      const newMessages = state.messages.slice(lastMessageCount);
+      const toolMessages = newMessages.filter(
+        (msg): msg is ToolMessage => msg instanceof ToolMessage
+      );
+
+      if (toolMessages.length > 0) {
+        console.log('🛠️ 工具執行結果:');
+        toolMessages.forEach((toolMessage) => {
+          console.log(`   - 工具: ${toolMessage.name}`);
+          console.log(`   - 輸出: ${toolMessage.content}`);
+        });
+      }
+      lastMessageCount = state.messages.length;
+
+      const response = await modelWithTools.invoke(state.messages);
+      return { messages: [response] };
+    };
+
+    const toolsNode = new ToolNode(tools);
+
+    const shouldContinue = (state: WorkflowState) => {
+      const lastMessage = state.messages[state.messages.length - 1];
+      if (!(lastMessage instanceof AIMessage)) {
+        throw new Error('預期最後一條訊息是 AIMessage');
+      }
+      if (lastMessage.tool_calls && lastMessage.tool_calls.length > 0) {
+        console.log('🤖 Agent 請求呼叫工具:');
+        lastMessage.tool_calls.forEach((toolCall) => {
+          console.log(
+            `   - 工具: ${toolCall.name}, 參數: ${JSON.stringify(
+              toolCall.args
+            )}`
+          );
+        });
+        return TOOLS_NODE;
+      }
+      return END;
+    };
+
     const workflow = new StateGraph<WorkflowState>({
       channels: {
         messages: {
@@ -64,45 +123,14 @@ export class PhishingAnalysisWorkflow {
           default: () => [],
         },
       },
-    });
+    })
+      .addNode(AGENT_NODE, agentNode)
+      .addNode(TOOLS_NODE, toolsNode)
+      .addEdge(START, AGENT_NODE)
+      .addConditionalEdges(AGENT_NODE, shouldContinue)
+      .addEdge(TOOLS_NODE, AGENT_NODE);
 
-    // 2. 定義節點
-    workflow.addNode(AGENT_NODE, async (state: WorkflowState) => {
-      const response = await this.modelWithTools.invoke(state.messages);
-      return { messages: [response] };
-    });
-    workflow.addNode(TOOLS_NODE, new ToolNode(availableTools));
-
-    // 3. 定義邊 (Edges)
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    workflow.addEdge(START, AGENT_NODE as any);
-
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    workflow.addConditionalEdges(AGENT_NODE as any, (state: WorkflowState) => {
-      const lastMessage = state.messages[state.messages.length - 1];
-      if (!(lastMessage instanceof AIMessage)) {
-        throw new Error('預期最後一條訊息是 AIMessage');
-      }
-
-      if (lastMessage.tool_calls && lastMessage.tool_calls.length > 0) {
-        return TOOLS_NODE;
-      }
-      return END;
-    });
-
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    workflow.addEdge(TOOLS_NODE as any, AGENT_NODE as any);
-
-    // 4. 編譯工作流
-    return workflow.compile();
-  }
-
-  /**
-   * 執行分析流程
-   */
-  async analyze(emailContent: string): Promise<PhishingDetectionResult> {
-    console.log('🚀 開始分析工作流...');
-    const compiledWorkflow = this.getWorkflow();
+    const compiledWorkflow = workflow.compile();
 
     const initialState: WorkflowState = {
       messages: [
@@ -112,8 +140,13 @@ export class PhishingAnalysisWorkflow {
     };
 
     const finalState = await compiledWorkflow.invoke(initialState, {
-      recursionLimit: 25,
+      recursionLimit: 15,
     });
+
+    console.log(
+      '✅ 工作流完成，最終狀態:',
+      JSON.stringify(finalState, null, 2)
+    );
 
     const lastMessage = finalState.messages[finalState.messages.length - 1];
 
@@ -123,9 +156,8 @@ export class PhishingAnalysisWorkflow {
       typeof lastMessage.content === 'string'
     ) {
       return this.parseResult(lastMessage.content);
-    } else {
-      throw new Error('分析流程結束但未產生有效結果');
     }
+    throw new Error('分析流程結束但未產生有效結果');
   }
 
   private async parseResult(content: string): Promise<PhishingDetectionResult> {

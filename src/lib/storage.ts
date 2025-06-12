@@ -137,6 +137,130 @@ export interface ModelSelectionConfig {
   useTools?: boolean; // 是否使用工具調用
 }
 
+/**
+ * 工具配置介面
+ */
+export interface ToolConfig {
+  id: string;
+  name: string;
+  isEnabled: boolean;
+  apiKey?: string;
+  settings?: Record<string, unknown>;
+}
+
+/**
+ * 工具配置相關的 localStorage 操作
+ */
+export const toolConfigStorage = {
+  /**
+   * 獲取工具配置
+   */
+  get(toolId: string): ToolConfig | null {
+    try {
+      const configJson = getStorageItem(`toolConfig_${toolId}`);
+      if (!configJson) {
+        return null;
+      }
+
+      const config = JSON.parse(configJson) as ToolConfig;
+
+      // 驗證配置格式
+      if (
+        typeof config.id === 'string' &&
+        typeof config.name === 'string' &&
+        typeof config.isEnabled === 'boolean'
+      ) {
+        return config;
+      }
+
+      return null;
+    } catch {
+      return null;
+    }
+  },
+
+  /**
+   * 設定工具配置
+   */
+  set(toolId: string, config: ToolConfig): boolean {
+    try {
+      const configJson = JSON.stringify(config);
+      return setStorageItem(`toolConfig_${toolId}`, configJson);
+    } catch {
+      return false;
+    }
+  },
+
+  /**
+   * 移除工具配置
+   */
+  remove(toolId: string): boolean {
+    return removeStorageItem(`toolConfig_${toolId}`);
+  },
+
+  /**
+   * 獲取所有工具配置
+   */
+  getAll(): Record<string, ToolConfig> {
+    if (!isStorageAvailable()) {
+      return {};
+    }
+
+    const configs: Record<string, ToolConfig> = {};
+    const prefix = 'toolConfig_';
+
+    try {
+      for (let i = 0; i < localStorage.length; i++) {
+        const key = localStorage.key(i);
+        if (key && key.startsWith(prefix)) {
+          const toolId = key.substring(prefix.length);
+          const config = this.get(toolId);
+          if (config) {
+            configs[toolId] = config;
+          }
+        }
+      }
+    } catch {
+      return {};
+    }
+
+    return configs;
+  },
+
+  /**
+   * 設定工具的啟用狀態
+   */
+  setEnabled(toolId: string, enabled: boolean): boolean {
+    const config = this.get(toolId);
+    if (config) {
+      config.isEnabled = enabled;
+      return this.set(toolId, config);
+    }
+    return false;
+  },
+
+  /**
+   * 設定工具的 API 金鑰
+   */
+  setApiKey(toolId: string, apiKey: string): boolean {
+    let config = this.get(toolId);
+    if (!config) {
+      // 如果配置不存在，建立預設配置
+      config = {
+        id: toolId,
+        name: toolId,
+        isEnabled: false,
+        apiKey: '',
+      };
+    }
+
+    config.apiKey = apiKey.trim();
+    config.isEnabled = !!apiKey.trim(); // 有 API 金鑰時自動啟用
+
+    return this.set(toolId, config);
+  },
+};
+
 export const modelConfigStorage = {
   /**
    * 儲存上次使用的模型設定
