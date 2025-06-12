@@ -6,7 +6,7 @@ import { ModelsConfig } from '@/types/model-config';
  */
 export const MODELS_CONFIG: ModelsConfig = {
   version: '1.0.0',
-  lastUpdated: '2024-12-19',
+  lastUpdated: '2025-06-12',
   providers: {
     openai: {
       name: 'OpenAI',
