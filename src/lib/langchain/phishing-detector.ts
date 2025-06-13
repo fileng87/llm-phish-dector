@@ -93,7 +93,7 @@ export class PhishingDetector {
     try {
       // 驗證輸入
       if (!emailContent || emailContent.trim().length === 0) {
-        throw new PhishingAnalysisError('郵件內容不能為空', 'EMPTY_CONTENT');
+        return this.createErrorResult('郵件內容不能為空');
       }
 
       // 如果支援工具調用且要求使用工具，使用工作流
@@ -121,10 +121,6 @@ export class PhishingDetector {
       // 否則使用傳統方式
       return await this.analyzeWithoutTools(emailContent);
     } catch (error) {
-      if (error instanceof PhishingAnalysisError) {
-        throw error;
-      }
-
       console.error('郵件分析失敗:', {
         errorMessage: error instanceof Error ? error.message : String(error),
         errorName: error instanceof Error ? error.name : 'Unknown',
@@ -132,11 +128,9 @@ export class PhishingDetector {
         errorCode:
           error instanceof PhishingAnalysisError ? error.code : undefined,
       });
-      throw new PhishingAnalysisError(
-        `分析失敗: ${error instanceof Error ? error.message : '未知錯誤'}`,
-        'ANALYSIS_FAILED',
-        error instanceof Error ? error : undefined
-      );
+
+      const errorMessage = `分析失敗: ${error instanceof Error ? error.message : '未知錯誤'}`;
+      return this.createErrorResult(errorMessage);
     }
   }
 
@@ -157,11 +151,8 @@ export class PhishingDetector {
     try {
       response = await this.model.invoke(messages);
     } catch (error) {
-      throw new PhishingAnalysisError(
-        this.parseModelError(error),
-        'MODEL_INVOCATION_FAILED',
-        error instanceof Error ? error : undefined
-      );
+      const errorMessage = this.parseModelError(error);
+      return this.createErrorResult(errorMessage);
     }
 
     // 解析 JSON 回應
@@ -169,13 +160,21 @@ export class PhishingDetector {
       response.content.toString()
     );
 
+    // 檢查解析是否失敗
+    if (rawResult && typeof rawResult === 'object' && 'error' in rawResult) {
+      return this.createErrorResult(rawResult.message as string);
+    }
+
     // 驗證和格式化結果
-    const result = this.validateAndFormatResult(rawResult);
-
-    // 添加時間戳
-    result.timestamp = new Date().toISOString();
-
-    return result;
+    try {
+      const result = this.validateAndFormatResult(rawResult);
+      // 添加時間戳
+      result.timestamp = new Date().toISOString();
+      return result;
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : '驗證失敗';
+      return this.createErrorResult(errorMessage);
+    }
   }
 
   /**
@@ -183,6 +182,20 @@ export class PhishingDetector {
    */
   get canUseTools(): boolean {
     return this.supportsToolCalling;
+  }
+
+  /**
+   * 創建錯誤結果對象
+   */
+  private createErrorResult(message: string): PhishingDetectionResult {
+    return {
+      isPhishing: false,
+      confidenceScore: 0,
+      suspiciousPoints: [`錯誤: ${message}`],
+      explanation: `分析過程中發生錯誤: ${message}`,
+      riskLevel: 'low',
+      timestamp: new Date().toISOString(),
+    };
   }
 
   /**
@@ -229,11 +242,11 @@ export class PhishingDetector {
           contentLength: content.length,
         });
 
-        // 如果 JSON 解析失敗，返回一個基本的結果
-        throw new PhishingAnalysisError(
-          '模型回應格式無效，無法解析為有效的 JSON 格式',
-          'INVALID_JSON_RESPONSE'
-        );
+        // 如果 JSON 解析失敗，返回一個表示錯誤的對象
+        return {
+          error: true,
+          message: '模型回應格式無效，無法解析為有效的 JSON 格式',
+        };
       }
     }
   }
@@ -297,10 +310,7 @@ export class PhishingDetector {
   private validateAndFormatResult(rawResult: unknown): PhishingDetectionResult {
     // 基本結構驗證
     if (!rawResult || typeof rawResult !== 'object') {
-      throw new PhishingAnalysisError(
-        '分析結果格式無效',
-        'INVALID_RESULT_FORMAT'
-      );
+      throw new Error('分析結果格式無效');
     }
 
     // 驗證必要欄位
@@ -316,10 +326,7 @@ export class PhishingDetector {
     );
 
     if (missingFields.length > 0) {
-      throw new PhishingAnalysisError(
-        `分析結果缺少必要欄位: ${missingFields.join(', ')}`,
-        'MISSING_REQUIRED_FIELDS'
-      );
+      throw new Error(`分析結果缺少必要欄位: ${missingFields.join(', ')}`);
     }
 
     try {
@@ -374,10 +381,7 @@ export class PhishingDetector {
         return false;
       }
     }
-    throw new PhishingAnalysisError(
-      `${fieldName} 必須是布林值`,
-      'INVALID_BOOLEAN'
-    );
+    throw new Error(`${fieldName} 必須是布林值`);
   }
 
   /**
@@ -386,16 +390,10 @@ export class PhishingDetector {
   private validateConfidenceScore(score: unknown): number {
     const numScore = Number(score);
     if (isNaN(numScore)) {
-      throw new PhishingAnalysisError(
-        '信心分數必須是數字',
-        'INVALID_CONFIDENCE_SCORE'
-      );
+      throw new Error('信心分數必須是數字');
     }
     if (numScore < 0 || numScore > 100) {
-      throw new PhishingAnalysisError(
-        '信心分數必須在 0-100 之間',
-        'CONFIDENCE_SCORE_OUT_OF_RANGE'
-      );
+      throw new Error('信心分數必須在 0-100 之間');
     }
     return Math.round(Math.max(0, Math.min(100, numScore)));
   }
@@ -417,10 +415,7 @@ export class PhishingDetector {
         // 如果只有一行，返回單個元素的陣列
         return [points.trim()];
       }
-      throw new PhishingAnalysisError(
-        '可疑點必須是字串陣列',
-        'INVALID_SUSPICIOUS_POINTS'
-      );
+      throw new Error('可疑點必須是字串陣列');
     }
 
     const validPoints = points
@@ -440,12 +435,12 @@ export class PhishingDetector {
    */
   private validateExplanation(explanation: unknown): string {
     if (typeof explanation !== 'string') {
-      throw new PhishingAnalysisError('解釋必須是字串', 'INVALID_EXPLANATION');
+      throw new Error('解釋必須是字串');
     }
 
     const trimmed = explanation.trim();
     if (trimmed.length === 0) {
-      throw new PhishingAnalysisError('解釋不能為空', 'EMPTY_EXPLANATION');
+      throw new Error('解釋不能為空');
     }
 
     if (trimmed.length > 2000) {
@@ -479,10 +474,7 @@ export class PhishingDetector {
       }
     }
 
-    throw new PhishingAnalysisError(
-      '風險等級必須是 low、medium 或 high',
-      'INVALID_RISK_LEVEL'
-    );
+    throw new Error('風險等級必須是 low、medium 或 high');
   }
 
   /**
@@ -523,7 +515,23 @@ export async function analyzePhishingEmail(
   console.log('模型名稱:', modelConfig.model);
   console.log('工具設定:', request.toolSettings);
 
-  const detector = new PhishingDetector(modelConfig, useTools);
+  // 嘗試創建偵測器，如果失敗則返回錯誤結果
+  let detector: PhishingDetector;
+  try {
+    detector = new PhishingDetector(modelConfig, useTools);
+  } catch (error) {
+    const errorMessage =
+      error instanceof Error ? error.message : '偵測器初始化失敗';
+    return {
+      isPhishing: false,
+      confidenceScore: 0,
+      suspiciousPoints: [`初始化錯誤: ${errorMessage}`],
+      explanation: `偵測器初始化過程中發生錯誤: ${errorMessage}`,
+      riskLevel: 'low',
+      timestamp: new Date().toISOString(),
+    };
+  }
+
   console.log('模型是否支援工具調用:', detector.canUseTools);
 
   // 檢查是否要使用工具
