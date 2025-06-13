@@ -85,8 +85,13 @@ export function ModelSelector({
         const options = await ModelConfigLoader.getModelOptions(providerId);
         setModelOptions(options);
 
-        // 如果沒有初始設定，自動選擇第一個可用的模型
-        if (!isInitialized && options.length > 0 && !options[0].isCustom) {
+        // 只有在沒有初始設定且尚未初始化時，才自動選擇第一個可用的模型
+        if (
+          !isInitialized &&
+          !initialConfig &&
+          options.length > 0 &&
+          !options[0].isCustom
+        ) {
           const firstModel = options[0];
           setSelectedModel(firstModel.id);
           // 預設模型根據支援情況自動設定工具調用
@@ -104,7 +109,7 @@ export function ModelSelector({
         setLoading(false);
       }
     },
-    [isInitialized]
+    [isInitialized, initialConfig]
   );
 
   // 恢復初始設定
@@ -116,6 +121,8 @@ export function ModelSelector({
 
       setSelectedProvider(config.provider);
       setTemperature(config.temperature);
+      // 恢復工具調用設定
+      setUseTools(config.useTools || false);
 
       // 載入該供應商的模型選項
       try {
@@ -131,16 +138,12 @@ export function ModelSelector({
         if (modelOption) {
           setSelectedModel(config.model);
           setCustomModel('');
-          // 預設模型根據支援情況自動設定工具調用
-          setUseTools(modelOption.supportsToolCalling || false);
         } else {
           // 如果不在預設選項中，設為自訂模型
           const customOption = options.find((option) => option.isCustom);
           if (customOption) {
             setSelectedModel(customOption.id);
             setCustomModel(config.model);
-            // 自訂模型使用配置中的設定，如果沒有則預設為 false
-            setUseTools(config.useTools || false);
           }
         }
 
@@ -167,6 +170,7 @@ export function ModelSelector({
       // 先載入供應商名稱
       await loadProviderNames();
 
+      // 優先恢復 initialConfig
       if (initialConfig && availableProviders.length > 0) {
         console.log('嘗試恢復初始設定:', initialConfig);
         const restored = await restoreInitialConfig(initialConfig);
