@@ -221,42 +221,47 @@ export function ToolsConfigCard({
                       : ''
                   }
                 >
-                  <div className="flex items-center justify-between w-full py-4">
-                    <AccordionTrigger className="flex-1 hover:no-underline p-0 mr-4">
-                      <div className="flex items-center space-x-3 text-left">
-                        <div
-                          className={`p-2 rounded-lg ${isEnabled ? 'bg-brand/20 text-brand' : 'bg-muted text-muted-foreground'}`}
-                        >
-                          <IconComponent className="h-4 w-4" />
-                        </div>
-                        <div>
-                          <div className="flex items-center space-x-2">
-                            <h4 className="font-medium text-sm">{tool.name}</h4>
-                            <div
-                              className={`h-2 w-2 rounded-full ${
-                                isEnabled && hasApiKey
-                                  ? 'bg-green-500'
-                                  : hasApiKey
-                                    ? 'bg-amber-500'
-                                    : 'bg-gray-400'
-                              }`}
-                            />
-                          </div>
-                          <p className="text-xs text-muted-foreground mt-0.5">
-                            {tool.description}
-                          </p>
-                        </div>
+                  <AccordionTrigger className="group flex w-full items-center justify-between rounded-lg p-4 text-left transition-colors hover:bg-white/5 hover:no-underline">
+                    <div className="flex flex-1 items-center space-x-3">
+                      <div
+                        className={`p-2 rounded-lg ${isEnabled ? 'bg-brand/20 text-brand' : 'bg-muted text-muted-foreground'}`}
+                      >
+                        <IconComponent className="h-4 w-4" />
                       </div>
-                    </AccordionTrigger>
-                    <Switch
-                      checked={isEnabled}
-                      onCheckedChange={(checked) =>
-                        handleConfigChange(tool.id, 'isEnabled', checked)
-                      }
-                      onClick={(e) => e.stopPropagation()}
-                      aria-label={`${tool.name} 開關`}
-                    />
-                  </div>
+                      <div className="flex-1">
+                        <div className="flex items-center space-x-2">
+                          <h4 className="font-medium text-sm">{tool.name}</h4>
+                          <div
+                            className={`h-2 w-2 rounded-full ${
+                              isEnabled && hasApiKey
+                                ? 'bg-green-500'
+                                : hasApiKey
+                                  ? 'bg-amber-500'
+                                  : 'bg-gray-400'
+                            }`}
+                          />
+                        </div>
+                        <p className="text-xs text-muted-foreground mt-0.5">
+                          {tool.description}
+                        </p>
+                      </div>
+                    </div>
+
+                    <div
+                      className="ml-4"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                      }}
+                    >
+                      <Switch
+                        checked={isEnabled}
+                        onCheckedChange={(checked) =>
+                          handleConfigChange(tool.id, 'isEnabled', checked)
+                        }
+                        aria-label={`${tool.name} 開關`}
+                      />
+                    </div>
+                  </AccordionTrigger>
                   <AccordionContent className="pt-2 pb-4 pr-6">
                     {tool.requiresApiKey && (
                       <div className="space-y-3 pl-12">
