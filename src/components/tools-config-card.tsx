@@ -221,113 +221,119 @@ export function ToolsConfigCard({
                       : ''
                   }
                 >
-                  <AccordionTrigger className="group flex w-full items-center justify-between rounded-lg p-4 text-left transition-colors hover:bg-white/5 hover:no-underline">
-                    <div className="flex flex-1 items-center space-x-3">
-                      <div
-                        className={`p-2 rounded-lg ${isEnabled ? 'bg-brand/20 text-brand' : 'bg-muted text-muted-foreground'}`}
-                      >
-                        <IconComponent className="h-4 w-4" />
-                      </div>
-                      <div className="flex-1">
-                        <div className="flex items-center space-x-2">
-                          <h4 className="font-medium text-sm">{tool.name}</h4>
-                          <div
-                            className={`h-2 w-2 rounded-full ${
-                              isEnabled && hasApiKey
-                                ? 'bg-green-500'
-                                : hasApiKey
-                                  ? 'bg-amber-500'
-                                  : 'bg-gray-400'
-                            }`}
-                          />
+                  <div className="relative">
+                    <AccordionTrigger className="flex w-full items-center justify-between rounded-lg p-4 pr-16 text-left transition-colors hover:bg-white/5 hover:no-underline">
+                      <div className="flex flex-1 items-center space-x-3">
+                        <div
+                          className={`p-2 rounded-lg ${isEnabled ? 'bg-brand/20 text-brand' : 'bg-muted text-muted-foreground'}`}
+                        >
+                          <IconComponent className="h-4 w-4" />
                         </div>
-                        <p className="text-xs text-muted-foreground mt-0.5">
-                          {tool.description}
-                        </p>
+                        <div className="flex-1">
+                          <div className="flex items-center space-x-2">
+                            <h4 className="font-medium text-sm">{tool.name}</h4>
+                            <div
+                              className={`h-2 w-2 rounded-full ${
+                                isEnabled && hasApiKey
+                                  ? 'bg-green-500'
+                                  : hasApiKey
+                                    ? 'bg-amber-500'
+                                    : 'bg-gray-400'
+                              }`}
+                            />
+                          </div>
+                          <p className="text-xs text-muted-foreground mt-0.5">
+                            {tool.description}
+                          </p>
+                        </div>
                       </div>
-                    </div>
+                    </AccordionTrigger>
 
                     <div
-                      className="ml-4"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                      }}
+                      className="absolute right-4 top-1/2 -translate-y-1/2 flex items-center space-x-2"
+                      onClick={(e) => e.stopPropagation()}
                     >
                       <Switch
+                        id={`switch-${tool.id}`}
                         checked={isEnabled}
                         onCheckedChange={(checked) =>
                           handleConfigChange(tool.id, 'isEnabled', checked)
                         }
+                        disabled={!toolCallingEnabled || !hasApiKey}
                         aria-label={`${tool.name} 開關`}
                       />
                     </div>
-                  </AccordionTrigger>
-                  <AccordionContent className="pt-2 pb-4 pr-6">
-                    {tool.requiresApiKey && (
-                      <div className="space-y-3 pl-12">
-                        <div className="flex items-center justify-between">
-                          <Label
-                            htmlFor={`${tool.id}-apikey`}
-                            className="text-sm font-medium"
-                          >
-                            {tool.apiKeyLabel}
-                          </Label>
-                          <span className="text-xs text-muted-foreground">
-                            {isEnabled && hasApiKey
-                              ? '已啟用並配置'
-                              : hasApiKey
-                                ? '已配置但未啟用'
-                                : '需要配置 API 金鑰'}
-                          </span>
-                        </div>
-
-                        <div className="relative">
-                          <Input
-                            id={`${tool.id}-apikey`}
-                            type={showApiKey ? 'text' : 'password'}
-                            placeholder={tool.apiKeyPlaceholder}
-                            value={config.apiKey || ''}
-                            onChange={(e) =>
-                              handleApiKeyChange(tool.id, e.target.value)
-                            }
-                            className={`glass glass-hover glass-focus pr-10 ${
-                              apiKeyError ? 'border-red-500' : ''
-                            }`}
-                          />
-                          <Button
-                            type="button"
-                            variant="ghost"
-                            size="icon"
-                            className="absolute right-0 top-0 h-full w-10 rounded-l-none hover:bg-transparent"
-                            onClick={() => toggleApiKeyVisibility(tool.id)}
-                          >
-                            {showApiKey ? (
-                              <EyeOff className="h-4 w-4 text-muted-foreground hover:text-foreground" />
-                            ) : (
-                              <Eye className="h-4 w-4 text-muted-foreground hover:text-foreground" />
-                            )}
-                          </Button>
-                        </div>
-
-                        {tool.helpUrl && (
-                          <p className="text-xs text-muted-foreground">
-                            需要 API 金鑰？請訪問{' '}
-                            <a
-                              href={tool.helpUrl}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="text-blue-500 hover:underline"
+                  </div>
+                  <AccordionContent className="pt-2 pb-4 px-4">
+                    <div className="space-y-4 border-t border-white/10 pt-4">
+                      {tool.requiresApiKey && (
+                        <div className="space-y-2">
+                          <div className="flex items-center justify-between">
+                            <Label
+                              htmlFor={`${tool.id}-apikey`}
+                              className="text-sm font-medium"
                             >
-                              {tool.helpUrl}
-                            </a>
-                          </p>
-                        )}
+                              {tool.apiKeyLabel}
+                            </Label>
+                            <span className="text-xs text-muted-foreground">
+                              {isEnabled && hasApiKey
+                                ? '已啟用並配置'
+                                : hasApiKey
+                                  ? '已配置但未啟用'
+                                  : '需要配置 API 金鑰'}
+                            </span>
+                          </div>
 
-                        {apiKeyError && (
-                          <p className="text-sm text-red-500">{apiKeyError}</p>
-                        )}
-                      </div>
-                    )}
+                          <div className="relative">
+                            <Input
+                              id={`${tool.id}-apikey`}
+                              type={showApiKey ? 'text' : 'password'}
+                              placeholder={tool.apiKeyPlaceholder}
+                              value={config.apiKey || ''}
+                              onChange={(e) =>
+                                handleApiKeyChange(tool.id, e.target.value)
+                              }
+                              className={`glass glass-hover glass-focus pr-10 ${
+                                apiKeyError ? 'border-red-500' : ''
+                              }`}
+                            />
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="icon"
+                              className="absolute right-0 top-0 h-full w-10 rounded-l-none hover:bg-transparent"
+                              onClick={() => toggleApiKeyVisibility(tool.id)}
+                            >
+                              {showApiKey ? (
+                                <EyeOff className="h-4 w-4 text-muted-foreground hover:text-foreground" />
+                              ) : (
+                                <Eye className="h-4 w-4 text-muted-foreground hover:text-foreground" />
+                              )}
+                            </Button>
+                          </div>
+
+                          {tool.helpUrl && (
+                            <p className="text-xs text-muted-foreground">
+                              需要 API 金鑰？請訪問{' '}
+                              <a
+                                href={tool.helpUrl}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="text-blue-500 hover:underline"
+                              >
+                                {tool.helpUrl}
+                              </a>
+                            </p>
+                          )}
+
+                          {apiKeyError && (
+                            <p className="text-sm text-red-500">
+                              {apiKeyError}
+                            </p>
+                          )}
+                        </div>
+                      )}
+                    </div>
                   </AccordionContent>
                 </AccordionItem>
               );
