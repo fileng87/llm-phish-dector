@@ -150,9 +150,11 @@ export class PhishingAnalysisWorkflow {
         recursionLimit: 15,
       });
 
+      console.log('✅ 工作流完成');
+      console.log('消息數量:', finalState.messages.length);
       console.log(
-        '✅ 工作流完成，最終狀態:',
-        JSON.stringify(finalState, null, 2)
+        '最後消息類型:',
+        finalState.messages[finalState.messages.length - 1]?.constructor.name
       );
 
       const lastMessage = finalState.messages[finalState.messages.length - 1];
