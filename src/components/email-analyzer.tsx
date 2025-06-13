@@ -29,6 +29,7 @@ import {
   Shield,
   ShieldAlert,
   ShieldCheck,
+  X,
 } from 'lucide-react';
 import remarkGfm from 'remark-gfm';
 import { toast } from 'sonner';
@@ -59,11 +60,13 @@ export function EmailAnalyzer({
     analyzeEmail,
     resetAnalysis,
     retryAnalysis,
+    cancelAnalysis,
     isAnalyzing,
     hasError,
     result,
     error,
     stepDescription,
+    canCancel,
   } = usePhishingAnalysis();
 
   // 需要從主頁面獲取 API 金鑰
@@ -312,41 +315,51 @@ export function EmailAnalyzer({
           )}
 
           <div className="flex gap-2">
-            <Button
-              onClick={handleAnalyze}
-              disabled={
-                !emailContent.trim() ||
-                !modelConfig ||
-                !apiKey ||
-                isAnalyzing ||
-                isParsing
-              }
-              className="flex-1"
-              size="lg"
-            >
-              {isAnalyzing ? (
-                <>
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  {stepDescription || '分析中...'}
-                </>
-              ) : (
-                <>
+            {!isAnalyzing ? (
+              <>
+                <Button
+                  onClick={handleAnalyze}
+                  disabled={
+                    !emailContent.trim() || !modelConfig || !apiKey || isParsing
+                  }
+                  className="flex-1"
+                  size="lg"
+                >
                   <Send className="mr-2 h-4 w-4" />
                   開始分析
-                </>
-              )}
-            </Button>
+                </Button>
 
-            <Button
-              onClick={handleReset}
-              variant="outline"
-              size="lg"
-              className="glass glass-hover"
-              disabled={!emailContent.trim() && !result && !hasError}
-            >
-              <RefreshCw className="h-4 w-4 mr-2" />
-              重置
-            </Button>
+                <Button
+                  onClick={handleReset}
+                  variant="outline"
+                  size="lg"
+                  className="glass glass-hover"
+                  disabled={!emailContent.trim() && !result && !hasError}
+                >
+                  <RefreshCw className="h-4 w-4 mr-2" />
+                  重置
+                </Button>
+              </>
+            ) : (
+              <>
+                <Button disabled className="flex-1" size="lg">
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  {stepDescription || '分析中...'}
+                </Button>
+
+                {canCancel && (
+                  <Button
+                    onClick={cancelAnalysis}
+                    variant="outline"
+                    size="lg"
+                    className="glass glass-hover text-warning hover:text-warning"
+                  >
+                    <X className="h-4 w-4 mr-2" />
+                    取消
+                  </Button>
+                )}
+              </>
+            )}
           </div>
 
           {/* 錯誤提示 */}

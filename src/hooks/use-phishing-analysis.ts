@@ -16,6 +16,10 @@ export function usePhishingAnalysis() {
   const [currentStep, setCurrentStep] = useState<string>('');
   const [stepDescription, setStepDescription] = useState<string>('');
 
+  // 新增：取消控制
+  const [abortController, setAbortController] =
+    useState<AbortController | null>(null);
+
   const parseError = (error: unknown): string => {
     if (typeof error === 'string') {
       return error;
@@ -58,12 +62,21 @@ export function usePhishingAnalysis() {
       return;
     }
 
+    // 創建新的 AbortController
+    const controller = new AbortController();
+    setAbortController(controller);
+
     let progressInterval: NodeJS.Timeout | null = null;
 
     try {
       setAnalysisState({ status: 'analyzing', progress: 0 });
       setCurrentStep('analyzing');
       setStepDescription('正在連接 AI 模型...');
+
+      // 檢查是否已被取消
+      if (controller.signal.aborted) {
+        throw new Error('分析已被取消');
+      }
 
       // 簡單的進度更新，不模擬假步驟
       progressInterval = setInterval(() => {
@@ -196,12 +209,28 @@ export function usePhishingAnalysis() {
     }
   }, []);
 
-  const resetAnalysis = useCallback(() => {
+  const cancelAnalysis = useCallback(() => {
+    if (abortController) {
+      abortController.abort();
+      setAbortController(null);
+    }
     setAnalysisState({ status: 'idle' });
     setCurrentStep('');
     setStepDescription('');
     toast.dismiss('analysis');
-  }, []);
+    toast.info('分析已取消', { duration: 3000 });
+  }, [abortController]);
+
+  const resetAnalysis = useCallback(() => {
+    if (abortController) {
+      abortController.abort();
+      setAbortController(null);
+    }
+    setAnalysisState({ status: 'idle' });
+    setCurrentStep('');
+    setStepDescription('');
+    toast.dismiss('analysis');
+  }, [abortController]);
 
   const retryAnalysis = useCallback(
     (request: AnalysisRequest) => {
@@ -223,5 +252,7 @@ export function usePhishingAnalysis() {
     analyzeEmail,
     resetAnalysis,
     retryAnalysis,
+    cancelAnalysis,
+    canCancel: analysisState.status === 'analyzing',
   };
 }
