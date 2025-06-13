@@ -100,7 +100,32 @@ export function usePhishingAnalysis() {
           progress: 100,
         });
       } else {
-        throw new Error(response.error || '分析失敗，但未回傳具體錯誤');
+        // 不拋出異常，直接處理為錯誤狀態
+        const errorMessage = response.error || '分析失敗，但未回傳具體錯誤';
+
+        setCurrentStep('error');
+        setStepDescription(`分析失敗：${errorMessage}`);
+        setAnalysisState({
+          status: 'error',
+          error: errorMessage,
+        });
+
+        toast.error(`分析失敗：${errorMessage}`, {
+          id: 'analysis',
+          duration: 6000,
+        });
+
+        console.error('郵件分析失敗:', {
+          error: response.error,
+          parsedError: errorMessage,
+          request: {
+            emailContentLength: request.emailContent.length,
+            provider: request.modelSettings.provider,
+            model: request.modelSettings.model,
+            temperature: request.modelSettings.temperature,
+            apiKeyLength: request.modelSettings.apiKey?.length,
+          },
+        });
       }
     } catch (error) {
       if (progressInterval) clearInterval(progressInterval);
