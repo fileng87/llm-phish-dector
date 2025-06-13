@@ -9,6 +9,7 @@ import {
 } from '@/app/actions';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Card, CardContent } from '@/components/ui/card';
+import { Progress } from '@/components/ui/progress';
 import { AlertCircle, CheckCircle2, FileText, Upload } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -23,6 +24,8 @@ export function EmailFileUpload({
 }: EmailFileUploadProps) {
   const [isDragOver, setIsDragOver] = React.useState(false);
   const [isUploading, setIsUploading] = React.useState(false);
+  const [uploadProgress, setUploadProgress] = React.useState(0);
+  const [uploadStage, setUploadStage] = React.useState<string>('');
   const [uploadedFile, setUploadedFile] = React.useState<File | null>(null);
   const [encryptionWarning, setEncryptionWarning] = React.useState<
     string | null
@@ -35,14 +38,31 @@ export function EmailFileUpload({
     setIsUploading(true);
     setUploadedFile(file);
     setEncryptionWarning(null);
+    setUploadProgress(0);
 
     try {
       toast.loading(`正在解析郵件文件: ${file.name}`, { id: 'file-upload' });
+
+      // 模擬進度更新
+      const updateProgress = (stage: string, progress: number) => {
+        setUploadStage(stage);
+        setUploadProgress(progress);
+      };
+
+      // 階段 1: 文件讀取
+      updateProgress('正在讀取文件...', 20);
+      await new Promise((resolve) => setTimeout(resolve, 300));
 
       // 創建 FormData 並發送到後端解析
       const formData = new FormData();
       formData.append('file', file);
 
+      // 階段 2: 上傳文件
+      updateProgress('正在上傳文件...', 40);
+      await new Promise((resolve) => setTimeout(resolve, 200));
+
+      // 階段 3: 解析郵件
+      updateProgress('正在解析郵件內容...', 60);
       const response = await parseEmailFile(formData);
 
       if (!response.success || !response.data) {
@@ -51,13 +71,18 @@ export function EmailFileUpload({
 
       const parsedEmail = response.data;
 
-      // 檢測加密內容
+      // 階段 4: 檢測加密內容
+      updateProgress('正在檢測加密內容...', 80);
       const encryptionInfo = await detectEncryptedContent(
         parsedEmail.fullContent
       );
       if (encryptionInfo.isEncrypted && encryptionInfo.warning) {
         setEncryptionWarning(encryptionInfo.warning);
       }
+
+      // 階段 5: 完成
+      updateProgress('解析完成', 100);
+      await new Promise((resolve) => setTimeout(resolve, 200));
 
       // 回調函數，將解析後的內容傳遞給父元件
       onEmailParsed(parsedEmail.fullContent, parsedEmail);
@@ -86,6 +111,8 @@ export function EmailFileUpload({
       setUploadedFile(null);
     } finally {
       setIsUploading(false);
+      setUploadProgress(0);
+      setUploadStage('');
     }
   };
 
@@ -143,12 +170,32 @@ export function EmailFileUpload({
           <div className="flex flex-col items-center justify-center space-y-4 text-center">
             {isUploading ? (
               <>
-                <div className="h-12 w-12 border-4 border-blue-500 border-t-transparent rounded-full animate-spin" />
-                <div>
-                  <p className="font-medium">正在解析郵件文件...</p>
-                  <p className="text-sm text-muted-foreground">
-                    {uploadedFile?.name}
-                  </p>
+                <div className="w-full max-w-xs space-y-3">
+                  {/* 進度條 */}
+                  <div className="space-y-2">
+                    <div className="flex justify-between text-sm">
+                      <span className="font-medium">
+                        {uploadStage || '正在處理...'}
+                      </span>
+                      <span className="text-muted-foreground">
+                        {uploadProgress}%
+                      </span>
+                    </div>
+                    <Progress value={uploadProgress} className="w-full" />
+                  </div>
+
+                  {/* 文件信息 */}
+                  <div className="text-center">
+                    <p className="text-sm text-muted-foreground">
+                      {uploadedFile?.name}
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      {uploadedFile
+                        ? (uploadedFile.size / 1024).toFixed(1)
+                        : '0'}{' '}
+                      KB
+                    </p>
+                  </div>
                 </div>
               </>
             ) : uploadedFile ? (
