@@ -92,15 +92,48 @@ export function usePhishingAnalysis() {
       if (progressInterval) clearInterval(progressInterval);
 
       if (response.success && response.data) {
-        setCurrentStep('completed');
-        setStepDescription('分析完成');
-        setAnalysisState({
-          status: 'completed',
-          result: response.data,
-          progress: 100,
-        });
+        // 檢查返回的結果是否為錯誤結果
+        if (response.data.isError) {
+          // 這是一個包裝的錯誤結果
+          const errorMessage =
+            response.data.errorMessage || '分析過程中發生錯誤';
+
+          setCurrentStep('error');
+          setStepDescription(`分析失敗：${errorMessage}`);
+          setAnalysisState({
+            status: 'error',
+            error: errorMessage,
+          });
+
+          toast.error(`分析失敗：${errorMessage}`, {
+            id: 'analysis',
+            duration: 6000,
+          });
+
+          console.error('郵件分析失敗 (包裝錯誤):', {
+            errorMessage: errorMessage,
+            suspiciousPoints: response.data.suspiciousPoints,
+            explanation: response.data.explanation,
+            request: {
+              emailContentLength: request.emailContent.length,
+              provider: request.modelSettings.provider,
+              model: request.modelSettings.model,
+              temperature: request.modelSettings.temperature,
+              apiKeyLength: request.modelSettings.apiKey?.length,
+            },
+          });
+        } else {
+          // 這是正常的分析結果
+          setCurrentStep('completed');
+          setStepDescription('分析完成');
+          setAnalysisState({
+            status: 'completed',
+            result: response.data,
+            progress: 100,
+          });
+        }
       } else {
-        // 不拋出異常，直接處理為錯誤狀態
+        // Server Action 本身失敗
         const errorMessage = response.error || '分析失敗，但未回傳具體錯誤';
 
         setCurrentStep('error');
@@ -115,7 +148,7 @@ export function usePhishingAnalysis() {
           duration: 6000,
         });
 
-        console.error('郵件分析失敗:', {
+        console.error('郵件分析失敗 (Server Action 錯誤):', {
           error: response.error,
           parsedError: errorMessage,
           request: {

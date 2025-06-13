@@ -59,10 +59,10 @@ export class PhishingAnalysisWorkflow {
     tavilyApiKey: string
   ): Promise<PhishingDetectionResult> {
     if (!this.model) {
-      throw new Error('模型未初始化，無法進行分析');
+      return this.createErrorResult('模型未初始化，無法進行分析');
     }
     if (!tavilyApiKey) {
-      throw new Error('必須提供 Tavily API 金鑰');
+      return this.createErrorResult('必須提供 Tavily API 金鑰');
     }
 
     console.log('🚀 開始分析工作流...');
@@ -73,7 +73,9 @@ export class PhishingAnalysisWorkflow {
     const modelWithTools = model.bindTools?.(tools);
 
     if (!modelWithTools) {
-      throw new Error('無法將工具綁定到模型。模型可能不支援 bindTools 方法。');
+      return this.createErrorResult(
+        '無法將工具綁定到模型。模型可能不支援 bindTools 方法。'
+      );
     }
 
     const agentNode = async (state: WorkflowState) => {
@@ -100,7 +102,11 @@ export class PhishingAnalysisWorkflow {
     const shouldContinue = (state: WorkflowState) => {
       const lastMessage = state.messages[state.messages.length - 1];
       if (!(lastMessage instanceof AIMessage)) {
-        throw new Error('預期最後一條訊息是 AIMessage');
+        console.error(
+          '預期最後一條訊息是 AIMessage，但收到:',
+          typeof lastMessage
+        );
+        return END; // 結束工作流而不是拋出異常
       }
       if (lastMessage.tool_calls && lastMessage.tool_calls.length > 0) {
         console.log('🤖 Agent 請求呼叫工具:');
@@ -139,25 +145,32 @@ export class PhishingAnalysisWorkflow {
       ],
     };
 
-    const finalState = await compiledWorkflow.invoke(initialState, {
-      recursionLimit: 15,
-    });
+    try {
+      const finalState = await compiledWorkflow.invoke(initialState, {
+        recursionLimit: 15,
+      });
 
-    console.log(
-      '✅ 工作流完成，最終狀態:',
-      JSON.stringify(finalState, null, 2)
-    );
+      console.log(
+        '✅ 工作流完成，最終狀態:',
+        JSON.stringify(finalState, null, 2)
+      );
 
-    const lastMessage = finalState.messages[finalState.messages.length - 1];
+      const lastMessage = finalState.messages[finalState.messages.length - 1];
 
-    if (
-      lastMessage &&
-      lastMessage.content &&
-      typeof lastMessage.content === 'string'
-    ) {
-      return this.parseResult(lastMessage.content);
+      if (
+        lastMessage &&
+        lastMessage.content &&
+        typeof lastMessage.content === 'string'
+      ) {
+        return this.parseResult(lastMessage.content);
+      }
+      return this.createErrorResult('分析流程結束但未產生有效結果');
+    } catch (error) {
+      const errorMessage =
+        error instanceof Error ? error.message : '工作流執行失敗';
+      console.error('工作流執行錯誤:', error);
+      return this.createErrorResult(errorMessage);
     }
-    throw new Error('分析流程結束但未產生有效結果');
   }
 
   private async parseResult(content: string): Promise<PhishingDetectionResult> {
@@ -171,17 +184,19 @@ export class PhishingAnalysisWorkflow {
           const parsedJson = JSON.parse(jsonMatch[2]);
           return this.validateAndFormatResult(parsedJson);
         } catch {
-          throw new Error('無法解析模型回應的 JSON 內容');
+          return this.createErrorResult('無法解析模型回應的 JSON 內容');
         }
       } else {
-        throw new Error('模型回應格式不正確，找不到有效的 JSON 區塊');
+        return this.createErrorResult(
+          '模型回應格式不正確，找不到有效的 JSON 區塊'
+        );
       }
     }
   }
 
   private validateAndFormatResult(rawResult: unknown): PhishingDetectionResult {
     if (typeof rawResult !== 'object' || rawResult === null) {
-      throw new Error('分析結果格式錯誤，不是有效的物件');
+      return this.createErrorResult('分析結果格式錯誤，不是有效的物件');
     }
 
     const result = rawResult as Record<string, unknown>;
@@ -217,6 +232,22 @@ export class PhishingAnalysisWorkflow {
       explanation,
       riskLevel,
       timestamp: new Date().toISOString(),
+    };
+  }
+
+  /**
+   * 創建錯誤結果對象
+   */
+  private createErrorResult(message: string): PhishingDetectionResult {
+    return {
+      isPhishing: false,
+      confidenceScore: 0,
+      suspiciousPoints: [`錯誤: ${message}`],
+      explanation: `分析過程中發生錯誤: ${message}`,
+      riskLevel: 'low',
+      timestamp: new Date().toISOString(),
+      isError: true,
+      errorMessage: message,
     };
   }
 }

@@ -6,6 +6,8 @@ export interface PhishingDetectionResult {
   explanation: string; // 詳細解釋
   riskLevel: 'low' | 'medium' | 'high'; // 風險等級
   timestamp: string; // 分析時間戳
+  isError?: boolean; // 可選：標識這是否為錯誤結果
+  errorMessage?: string; // 可選：錯誤訊息（當 isError 為 true 時使用）
 }
 
 // 使用者輸入格式

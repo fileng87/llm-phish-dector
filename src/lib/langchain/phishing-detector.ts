@@ -195,6 +195,8 @@ export class PhishingDetector {
       explanation: `分析過程中發生錯誤: ${message}`,
       riskLevel: 'low',
       timestamp: new Date().toISOString(),
+      isError: true,
+      errorMessage: message,
     };
   }
 
@@ -529,6 +531,8 @@ export async function analyzePhishingEmail(
       explanation: `偵測器初始化過程中發生錯誤: ${errorMessage}`,
       riskLevel: 'low',
       timestamp: new Date().toISOString(),
+      isError: true,
+      errorMessage: errorMessage,
     };
   }
 
